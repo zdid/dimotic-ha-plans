@@ -1,5 +1,5 @@
-/* Plans — panneau personnalisé (Dimotic-HA Plans). v0.1.5
- * Affichage : un onglet par plan, objets placés sur l'image (icône seule, colorée selon l'état ; valeur des capteurs à
+/* Plans — panneau personnalisé (Dimotic-HA Plans). v0.1.6
+ * Affichage : un onglet par plan, objets placés sur l'image (icône seule, colorée selon son type et son état — palette COLORS ; valeur des capteurs à
  * droite de l'icône ; mise à jour en direct). Point d'ancrage d'un objet = coin inférieur gauche de son icône ; d'un
  * texte = coin inférieur gauche du texte (alignements faciles).
  * Clic : bascule marche/arrêt des objets tout-ou-rien (lumière, prise, ventilateur, booléen), fiche de l'entité pour les
@@ -39,8 +39,8 @@
     .obj { position: absolute; transform: translateY(-100%); display: flex; flex-direction: row; align-items: center; gap: 2px; cursor: pointer;
            line-height: 1.1; -webkit-tap-highlight-color: transparent; user-select: none; }
     .obj .ico { box-sizing: border-box; flex: none; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
-                color: #424242; filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff); }
-    .obj.on .ico { color: #ff9800; }
+                color: var(--obj-color, #546e7a); filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff); }
+    .obj.on .ico { filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 4px var(--obj-color, #ffb300)); }
     .obj.unav .ico { opacity: .35; }
     .obj.orphan .ico { color: var(--error-color, #db4437); }
     .obj.busy .ico { animation: busy 0.8s ease-in-out infinite; }
@@ -84,6 +84,30 @@
   const TOGGLE_DOMAINS = new Set(['light', 'switch', 'fan', 'input_boolean']);
   const VALUE_DOMAINS = new Set(['sensor', 'number', 'input_number']);
   const LONG_PRESS_MS = 500;
+  /* Couleurs par type d'objet : [allumé/actif, éteint/repos]. Variables de couleur d'état de HA quand elles existent. */
+  const COLORS = {
+    light: ['var(--state-light-active-color, #ffb300)', '#607d8b'],
+    switch: ['var(--state-switch-active-color, #43a047)', '#78909c'],
+    input_boolean: ['#43a047', '#78909c'],
+    fan: ['var(--state-fan-active-color, #00acc1)', '#78909c'],
+    climate: ['var(--state-climate-heat-color, #ff5722)', '#5c6bc0'],
+    water_heater: ['#ff7043', '#78909c'],
+    cover: ['var(--state-cover-active-color, #8e24aa)', '#5e35b1'],
+    lock: ['#e53935', '#43a047'],
+    media_player: ['#1e88e5', '#78909c'],
+    binary_sensor: ['#e53935', '#26a69a'],
+  };
+  const SENSOR_COLORS = {
+    temperature: '#e53935', humidity: '#1e88e5', moisture: '#1e88e5', pressure: '#6d4c41', atmospheric_pressure: '#6d4c41',
+    power: '#f9a825', apparent_power: '#f9a825', energy: '#fb8c00', current: '#fdd835', voltage: '#7cb342',
+    battery: '#43a047', illuminance: '#fbc02d', carbon_dioxide: '#8d6e63', pm25: '#8d6e63', signal_strength: '#90a4ae',
+  };
+  const colorFor = (st, domain) => {
+    if (domain === 'sensor' || domain === 'number' || domain === 'input_number') return SENSOR_COLORS[st.attributes.device_class] || '#00897b';
+    const c = COLORS[domain];
+    if (!c) return '#00897b';
+    return ON_STATES.has(st.state) ? c[0] : c[1];
+  };
   const SNAP_PX = 6;
   const MAX_UPLOAD = 3 * 1024 * 1024;
   const GRID_STEPS = { 0: 'aucune', 0.5: '0,5 %', 1: '1 %', 2: '2 %' };
@@ -332,7 +356,8 @@
         o.el.classList.toggle('busy', !!o.busy);
         o.el.classList.toggle('orphan', !st);
         o.el.classList.toggle('unav', !!st && (st.state === 'unavailable' || st.state === 'unknown'));
-        o.el.classList.toggle('on', !!st && ON_STATES.has(st.state));
+        o.el.classList.toggle('on', !!st && ON_STATES.has(st.state) && !VALUE_DOMAINS.has(domain));
+        if (st) o.el.style.setProperty('--obj-color', colorFor(st, domain)); else o.el.style.removeProperty('--obj-color');
         let icon = o.ico.firstChild;
         if (st) {
           if (!icon || icon.localName !== 'ha-state-icon') { o.ico.innerHTML = ''; icon = document.createElement('ha-state-icon'); o.ico.appendChild(icon); }
