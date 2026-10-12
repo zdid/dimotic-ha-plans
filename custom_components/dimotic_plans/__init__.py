@@ -25,7 +25,7 @@ from .const import (
 from .storage import PlanStore
 
 _LOGGER = logging.getLogger(__name__)
-VERSION = "0.0.3"
+VERSION = "0.0.4"
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -51,7 +51,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         module_url=f"{STATIC_URL}/panel.js?v={VERSION}",
         sidebar_title=title,
         sidebar_icon=icon,
-        require_admin=True,
+        require_admin=False,  # affichage pour tous ; import (et futur éditeur) réservés aux administrateurs
         config={"title": title},
     )
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))

@@ -29,7 +29,6 @@ def async_register(hass: HomeAssistant) -> None:
 
 
 @websocket_api.websocket_command({vol.Required("type"): "dimotic_plans/floorplans/list"})
-@websocket_api.require_admin
 @websocket_api.async_response
 async def ws_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     store = _store(hass)
@@ -117,7 +116,6 @@ def resolve_positions(positions: list[dict[str, Any]], lookup: Any) -> list[dict
 
 
 @websocket_api.websocket_command({vol.Required("type"): "dimotic_plans/floorplans/get", vol.Required("id"): str})
-@websocket_api.require_admin
 @websocket_api.async_response
 async def ws_get(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Un plan complet, avec l'entity_id ACTUEL de chaque objet."""
