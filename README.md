@@ -5,7 +5,7 @@ réglables), pour afficher les plans de la maison avec les objets placés dessus
 les commander, et à terme les créer et les modifier — **sans passer par dimotic-ha**. Il remplace l'outil HAPLAN de
 [dimotic-ha](https://github.com/zdid/dimotic-ha).
 
-> **État : v0.1.0.** Le panneau « Plans » affiche un onglet par plan, avec les **objets placés sur l'image** : icône seule,
+> **État : v0.1.1.** Le panneau « Plans » affiche un onglet par plan, avec les **objets placés sur l'image** : icône seule,
 > colorée selon l'état (allumé/ouvert en orange, indisponible très pâle), valeur des capteurs, température des thermostats
 > et position des volets à droite de l'icône, mise à jour en direct. **Un clic allume/éteint** les lumières, prises,
 > ventilateurs et booléens ; pour les autres (volets, thermostats, capteurs…) il ouvre la fiche de l'entité.
@@ -13,7 +13,7 @@ les commander, et à terme les créer et les modifier — **sans passer par dimo
 > du registre).
 >
 > **Éditeur (administrateurs, bouton « Modifier »)** : glisser les objets et les textes (souris ou doigt), flèches du
-> clavier (1 px, Maj : 10 px), **magnétisme** sur les autres éléments (ligne rose), ajouter/retirer un objet ou un texte,
+> clavier (1 px, Maj : 10 px), **magnétisme** sur les autres éléments (ligne rose), ajouter un objet (recherche par nom, pièce, appareil ou fabricant ; entités secondaires cachées par défaut) ou un texte, retirer,
 > créer un plan (image ou page blanche), le renommer, changer son image, le supprimer. Rien n'est écrit avant « Enregistrer ».
 >
 > **Point d'ancrage** : la position d'un objet est le **coin inférieur gauche de son icône**, celle d'un texte le coin
