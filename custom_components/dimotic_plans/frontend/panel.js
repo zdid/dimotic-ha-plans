@@ -1,10 +1,11 @@
-/* Plans — panneau personnalisé (Dimotic-HA Plans). v0.1.2
+/* Plans — panneau personnalisé (Dimotic-HA Plans). v0.1.3
  * Affichage : un onglet par plan, objets placés sur l'image (icône seule, colorée selon l'état ; valeur des capteurs à
  * droite de l'icône ; mise à jour en direct). Point d'ancrage d'un objet = coin inférieur gauche de son icône ; d'un
  * texte = coin inférieur gauche du texte (alignements faciles).
  * Clic : bascule marche/arrêt des objets tout-ou-rien (lumière, prise, ventilateur, booléen), fiche de l'entité pour les
  * autres ; appui long ou clic droit : fiche de l'entité.
- * Éditeur (administrateurs) : déplacer (glisser, flèches du clavier), magnétisme sur les autres éléments, ajouter/retirer
+ * Éditeur (administrateurs) : déplacer (glisser, flèches du clavier), magnétisme sur les autres éléments puis sur une grille
+ * invisible (pas en % de l'image, réglable, affichable), ajouter/retirer
  * objets et textes, créer/renommer/supprimer un plan, changer son image. */
 (() => {
   const STYLE = `
@@ -52,6 +53,9 @@
     .edit .obj::after, .edit .txt::after { content: ''; position: absolute; left: -3px; bottom: -3px; width: 6px; height: 6px; border-radius: 50%; background: var(--primary-color, #03a9f4); }
     .guide { position: absolute; background: #e91e63; pointer-events: none; display: none; z-index: 5; }
     .guide.v { top: 0; bottom: 0; width: 1px; } .guide.h { left: 0; right: 0; height: 1px; }
+    .gridlines { position: absolute; inset: 0; pointer-events: none; border-radius: 12px; }
+    .tools select { font: inherit; font-size: 14px; padding: 4px; border-radius: 8px; border: 1px solid var(--divider-color, #ccc); background: var(--card-background-color, #fff); color: inherit; }
+    .tools label { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; }
     .foot { margin-top: 8px; font-size: 13px; }
     .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 10; padding: 16px; }
     .dialog { background: var(--card-background-color, #fff); color: var(--primary-text-color, #212121); border-radius: 12px; padding: 20px; width: min(460px, 100%);
@@ -78,6 +82,9 @@
   const LONG_PRESS_MS = 500;
   const SNAP_PX = 6;
   const MAX_UPLOAD = 3 * 1024 * 1024;
+  const GRID_STEPS = { 0: 'aucune', 0.5: '0,5 %', 1: '1 %', 2: '2 %' };
+  const pref = (key, fallback) => { try { const v = localStorage.getItem('dimotic_plans.' + key); return v === null ? fallback : JSON.parse(v); } catch (_e) { return fallback; } };
+  const setPref = (key, value) => { try { localStorage.setItem('dimotic_plans.' + key, JSON.stringify(value)); } catch (_e) { /* stockage indisponible */ } };
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const clamp = (v) => Math.min(1, Math.max(0, v));
   const fileToBase64 = (file) => new Promise((resolve, reject) => {
@@ -92,6 +99,7 @@
       super(); this._hass = null; this._narrow = false; this._built = false; this._title = 'Plans';
       this._plans = []; this._current = null; this._detail = null; this._src = ''; this._objs = []; this._texts = [];
       this._edit = false; this._draft = null; this._dirty = false; this._sel = null;
+      this._grid = pref('grid', 1); this._showGrid = pref('showGrid', false);
       this.attachShadow({ mode: 'open' });
       this._ro = new ResizeObserver(() => this._fit());
       this._onKey = (e) => this._key(e);
@@ -193,7 +201,10 @@
         b('renplan', 'mdi:rename-outline', 'Renommer', { off: d || !has, title: planTitle }),
         b('imgplan', 'mdi:image-edit-outline', 'Image', { off: d || !has, title: planTitle }),
         b('delplan', 'mdi:delete-outline', 'Supprimer le plan', { off: d || !has, danger: true, title: planTitle }),
-        `<span class="hint">${sel ? 'Flèches : 1 px (Maj : 10 px) · Suppr : retirer · Échap : désélectionner' : 'Glisse un élément pour le déplacer (il se cale sur les autres), clique pour le sélectionner.'}</span>`,
+        '<span class="sep"></span>',
+        `<label>Grille <select id="grid">${Object.entries(GRID_STEPS).map(([k, v]) => `<option value="${k}" ${Number(k) === this._grid ? 'selected' : ''}>${v}</option>`).join('')}</select></label>`,
+        `<label><input type="checkbox" id="showgrid" ${this._showGrid ? 'checked' : ''} ${this._grid ? '' : 'disabled'}>Afficher</label>`,
+        `<span class="hint">${sel ? (this._grid ? 'Flèches : un pas de grille' : 'Flèches : 1 px (Maj : 10 px)') + ' · Suppr : retirer · Échap : désélectionner' : 'Glisse un élément pour le déplacer (il se cale sur les autres, puis sur la grille), clique pour le sélectionner.'}</span>`,
       ].join('');
       const on = (id, fn) => { const el = tools.querySelector('#' + id); if (el) el.addEventListener('click', () => { if (!el.disabled) fn(); }); };
       on('addobj', () => this._addObject());
@@ -205,7 +216,23 @@
       on('renplan', () => this._renamePlan());
       on('imgplan', () => this._changeImage());
       on('delplan', () => this._deletePlan());
+      tools.querySelector('#grid').addEventListener('change', (e) => { this._grid = Number(e.target.value); setPref('grid', this._grid); this._renderTools(); this._drawGrid(); });
+      tools.querySelector('#showgrid').addEventListener('change', (e) => { this._showGrid = e.target.checked; setPref('showGrid', this._showGrid); this._drawGrid(); });
     }
+
+    /* Lignes de la grille (pas en % de l'image), seulement en mode Modifier et si « Afficher » est coché. */
+    _drawGrid() {
+      const plan = this.shadowRoot.getElementById('plan');
+      if (!plan) return;
+      let g = plan.querySelector('.gridlines');
+      if (!this._edit || !this._grid || !this._showGrid) { if (g) g.remove(); return; }
+      if (!g) { g = document.createElement("div"); g.className = "gridlines"; plan.insertBefore(g, plan.querySelector(".guide")); }
+      const s = this._grid;
+      g.style.backgroundImage = 'linear-gradient(to right, rgba(3,169,244,.25) 1px, transparent 1px), linear-gradient(to bottom, rgba(3,169,244,.25) 1px, transparent 1px)';
+      g.style.backgroundSize = `${s}% ${s}%`;
+    }
+
+    _snapGrid(v) { return this._grid ? Math.round(v * 100 / this._grid) * this._grid / 100 : v; }
 
     _setDirty() {
       if (!this._dirty) { this._dirty = true; this._renderActions(); this._renderTabs(); }
@@ -266,6 +293,7 @@
         return o;
       });
       this._markSelection();
+      this._drawGrid();
       this._refresh();
     }
 
@@ -442,8 +470,8 @@
             if (Math.abs(ox - px) <= SNAP_PX && (snapX === null || Math.abs(ox - px) < Math.abs(snapX - px))) snapX = ox;
             if (Math.abs(oy - py) <= SNAP_PX && (snapY === null || Math.abs(oy - py) < Math.abs(snapY - py))) snapY = oy;
           }
-          if (snapX !== null) px = snapX;
-          if (snapY !== null) py = snapY;
+          px = snapX !== null ? snapX : this._snapGrid(px / rect.width) * rect.width;
+          py = snapY !== null ? snapY : this._snapGrid(py / rect.height) * rect.height;
           gv.style.display = snapX !== null ? 'block' : 'none'; gv.style.left = `${px}px`;
           gh.style.display = snapY !== null ? 'block' : 'none'; gh.style.top = `${py}px`;
           this._move(o, px / rect.width, py / rect.height);
@@ -464,13 +492,21 @@
       if (e.composedPath().some((n) => n && ['input', 'textarea', 'select'].includes(n.localName))) return;
       const plan = this.shadowRoot.getElementById('plan');
       if (!plan) return;
-      const step = e.shiftKey ? 10 : 1;
-      const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+      const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
       if (d) {
         e.preventDefault();
         const o = (this._sel.kind === 'obj' ? this._objs : this._texts)[this._sel.index];
         const it = this._item(o);
-        this._move(o, it.x + d[0] / plan.clientWidth, it.y + d[1] / plan.clientHeight);
+        if (this._grid) {
+          /* Un pas de grille, en partant de la ligne de grille la plus proche (un objet hors grille s'y cale d'abord). */
+          const g = this._grid / 100;
+          const nx = d[0] ? (d[0] > 0 ? Math.floor(it.x / g + 1e-6) + 1 : Math.ceil(it.x / g - 1e-6) - 1) * g : it.x;
+          const ny = d[1] ? (d[1] > 0 ? Math.floor(it.y / g + 1e-6) + 1 : Math.ceil(it.y / g - 1e-6) - 1) * g : it.y;
+          this._move(o, nx, ny);
+        } else {
+          const step = e.shiftKey ? 10 : 1;
+          this._move(o, it.x + d[0] * step / plan.clientWidth, it.y + d[1] * step / plan.clientHeight);
+        }
         this._setDirty();
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault(); this._removeSelected();

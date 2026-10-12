@@ -5,7 +5,7 @@ réglables), pour afficher les plans de la maison avec les objets placés dessus
 les commander, et à terme les créer et les modifier — **sans passer par dimotic-ha**. Il remplace l'outil HAPLAN de
 [dimotic-ha](https://github.com/zdid/dimotic-ha).
 
-> **État : v0.1.2.** Le panneau « Plans » affiche un onglet par plan, avec les **objets placés sur l'image** : icône seule,
+> **État : v0.1.3.** Le panneau « Plans » affiche un onglet par plan, avec les **objets placés sur l'image** : icône seule,
 > colorée selon l'état (allumé/ouvert en orange, indisponible très pâle), valeur des capteurs, température des thermostats
 > et position des volets à droite de l'icône, mise à jour en direct. **Un clic allume/éteint** les lumières, prises,
 > ventilateurs et booléens ; pour les autres (volets, thermostats, capteurs…) il ouvre la fiche de l'entité.
@@ -13,7 +13,7 @@ les commander, et à terme les créer et les modifier — **sans passer par dimo
 > du registre).
 >
 > **Éditeur (administrateurs, bouton « Modifier »)** : glisser les objets et les textes (souris ou doigt), flèches du
-> clavier (1 px, Maj : 10 px), **magnétisme** sur les autres éléments (ligne rose), ajouter un objet (choix par la **taxonomie** QUOI/OÙ posée par nommage — attribut `attributs_taxonomie` — avec recherche ; entités sans taxonomie et secondaires cachées par défaut) ou un texte, retirer,
+> clavier (1 px, Maj : 10 px), **magnétisme** sur les autres éléments (ligne rose) puis sur une **grille** (aucune, 0,5 %, 1 % ou 2 % de l'image ; invisible sauf « Afficher » ; les flèches avancent alors d'un pas), ajouter un objet (choix par la **taxonomie** QUOI/OÙ posée par nommage — attribut `attributs_taxonomie` — avec recherche ; entités sans taxonomie et secondaires cachées par défaut) ou un texte, retirer,
 > créer un plan (image ou page blanche), le renommer, changer son image, le supprimer. Rien n'est écrit avant « Enregistrer ».
 >
 > **Point d'ancrage** : la position d'un objet est le **coin inférieur gauche de son icône**, celle d'un texte le coin
