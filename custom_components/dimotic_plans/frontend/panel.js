@@ -1,4 +1,4 @@
-/* Plans — panneau personnalisé (Dimotic-HA Plans). v0.1.4
+/* Plans — panneau personnalisé (Dimotic-HA Plans). v0.1.5
  * Affichage : un onglet par plan, objets placés sur l'image (icône seule, colorée selon l'état ; valeur des capteurs à
  * droite de l'icône ; mise à jour en direct). Point d'ancrage d'un objet = coin inférieur gauche de son icône ; d'un
  * texte = coin inférieur gauche du texte (alignements faciles).
@@ -75,6 +75,8 @@
     .pick { overflow: auto; min-height: 120px; max-height: 50vh; border: 1px solid var(--divider-color, #ccc); border-radius: 6px; }
     .pick div { display: flex; align-items: center; gap: 10px; padding: 6px 10px; cursor: pointer; line-height: 1.2; }
     .pick div:hover { background: var(--secondary-background-color, #f0f0f0); }
+    .pick span { min-width: 0; overflow-wrap: anywhere; } .pick ha-state-icon { flex: none; }
+    .pick { overflow-x: hidden; }
     .pick small { display: block; color: var(--secondary-text-color, #727272); font-size: 12px; }
   `;
   const TEXT_PX = { small: 14, medium: 20, large: 28 };
