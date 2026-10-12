@@ -22,7 +22,7 @@ def test_resume_compte_positions_et_textes():
         "original": {"filename": "plan-original.png", "positions": [], "texts": [{"id": "t1"}, {"id": "t2"}]},
     })
     resume = {p["id"]: p for p in store.summary()}
-    assert resume["Premier"] == {"id": "Premier", "filename": "Premier.png", "positions": 1, "texts": 0}
+    assert resume["Premier"] == {"id": "Premier", "filename": "Premier.png", "positions": 1, "orphans": 1, "texts": 0}  # sans registry_id = orpheline
     assert resume["original"]["texts"] == 2
 
 

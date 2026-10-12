@@ -36,16 +36,20 @@ class PlanStore:
         return self._data["floorplans"]
 
     def summary(self) -> list[dict[str, Any]]:
-        """Liste sans le détail des positions : id, fichier, nombre de positions et de textes."""
+        """Liste sans le détail des positions : id, fichier, nombre de positions (dont orphelines) et de textes."""
         return [
             {
                 "id": plan_id,
                 "filename": plan.get("filename", ""),
                 "positions": len(plan.get("positions", [])),
+                "orphans": sum(1 for p in plan.get("positions", []) if not p.get("registry_id")),
                 "texts": len(plan.get("texts", [])),
             }
             for plan_id, plan in self.floorplans.items()
         ]
+
+    def replace_all(self, floorplans: dict[str, Any]) -> None:
+        self._data = {"floorplans": floorplans}
 
     def async_schedule_save(self) -> None:
         self._store.async_delay_save(lambda: self._data, 1)

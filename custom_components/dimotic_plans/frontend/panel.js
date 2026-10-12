@@ -1,5 +1,5 @@
-/* Plans — panneau personnalisé (Dimotic-HA Plans). Squelette v0.0.1 : affiche le titre réglable et la liste des plans
- * stockés dans HA. L'affichage des plans, la commande des objets et l'éditeur viennent ensuite (voir README). */
+/* Plans — panneau personnalisé (Dimotic-HA Plans). v0.0.2 : affiche le titre réglable et les plans stockés dans HA
+ * (image + nombre d'objets, dont orphelins). L'affichage des plans, la commande des objets et l'éditeur viennent ensuite (voir README). */
 (() => {
   const STYLE = `
     :host { display: flex; flex-direction: column; height: 100vh; height: 100dvh; background: var(--primary-background-color, #fafafa);
@@ -9,7 +9,8 @@
     main { flex: 1; min-height: 0; overflow: auto; padding: 16px; }
     .card { background: var(--card-background-color, #fff); border-radius: 12px; padding: 16px; box-shadow: var(--ha-card-box-shadow, 0 1px 3px rgba(0,0,0,.2)); margin-bottom: 12px; }
     .muted { color: var(--secondary-text-color, #727272); }
-    table { border-collapse: collapse; width: 100%; } td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--divider-color, #e0e0e0); }
+    h3 { margin: 0 0 8px; } img { max-width: 100%; max-height: 60vh; display: block; border-radius: 8px; background: #fff; }
+    .warn { color: var(--warning-color, #ff9800); }
   `;
   class PlansPanel extends HTMLElement {
     constructor() { super(); this._hass = null; this._narrow = false; this._built = false; this._title = 'Plans'; this.attachShadow({ mode: 'open' }); }
@@ -34,8 +35,13 @@
           main.innerHTML = '<div class="card"><b>Aucun plan pour le moment.</b><p class="muted">L\'import des plans de dimotic-ha et l\'éditeur arrivent dans les prochaines versions.</p></div>';
           return;
         }
-        const rows = res.floorplans.map((p) => `<tr><td>${p.id}</td><td>${p.filename}</td><td>${p.positions}</td><td>${p.texts}</td></tr>`).join('');
-        main.innerHTML = `<div class="card"><table><tr><th>Plan</th><th>Image</th><th>Objets</th><th>Textes</th></tr>${rows}</table></div>`;
+        const cards = await Promise.all(res.floorplans.map(async (p) => {
+          let src = '';
+          try { src = (await this._hass.callWS({ type: 'auth/sign_path', path: '/api/dimotic_plans/image/' + encodeURIComponent(p.filename) })).path; } catch (_e) { /* image absente */ }
+          const orph = p.orphans ? ` · <span class="warn">${p.orphans} orpheline(s)</span>` : '';
+          return `<div class="card"><h3>${p.id}</h3>${src ? `<img src="${src}" alt="${p.id}">` : ''}<p class="muted">${p.positions} objet(s)${orph} · ${p.texts} texte(s) · ${p.filename}</p></div>`;
+        }));
+        main.innerHTML = cards.join('');
       } catch (err) {
         main.innerHTML = `<div class="card"><b>Erreur</b><p class="muted">${(err && err.message) || err}</p></div>`;
       }

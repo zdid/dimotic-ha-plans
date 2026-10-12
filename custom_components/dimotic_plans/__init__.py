@@ -11,6 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from . import websocket_api as plans_ws
+from .http import PlanImageView
 from .const import (
     CONF_ICON,
     CONF_TITLE,
@@ -24,7 +25,7 @@ from .const import (
 from .storage import PlanStore
 
 _LOGGER = logging.getLogger(__name__)
-VERSION = "0.0.1"
+VERSION = "0.0.2"
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -40,6 +41,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         frontend_dir = str(Path(__file__).parent / "frontend")
         await hass.http.async_register_static_paths([StaticPathConfig(STATIC_URL, frontend_dir, False)])
         plans_ws.async_register(hass)
+        hass.http.register_view(PlanImageView(hass))
         store_data["static_registered"] = True
 
     await panel_custom.async_register_panel(
