@@ -25,6 +25,7 @@ def _store(hass: HomeAssistant):
 def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_list)
     websocket_api.async_register_command(hass, ws_import)
+    websocket_api.async_register_command(hass, ws_get)
 
 
 @websocket_api.websocket_command({vol.Required("type"): "dimotic_plans/floorplans/list"})
@@ -93,3 +94,45 @@ async def ws_import(hass: HomeAssistant, connection: websocket_api.ActiveConnect
     store.async_schedule_save()
     report["images"] = sorted(images)
     connection.send_result(msg["id"], report)
+
+
+def resolve_positions(positions: list[dict[str, Any]], lookup: Any) -> list[dict[str, Any]]:
+    """`entity_id` actuel de chaque position, retrouvé par l'identifiant stable du registre (renommages suivis).
+
+    `lookup(id_ou_entity_id)` renvoie l'entrée du registre ou None. Sans entrée : position « orpheline » (gardée).
+    """
+    out = []
+    for pos in positions:
+        entry = lookup(pos["registry_id"]) if pos.get("registry_id") else None
+        if entry is None:
+            entry = lookup(pos["entity_id"])
+        out.append({
+            "entity_id": entry.entity_id if entry is not None else pos["entity_id"],
+            "stored_entity_id": pos["entity_id"],
+            "orphan": entry is None,
+            "x": pos.get("x"),
+            "y": pos.get("y"),
+        })
+    return out
+
+
+@websocket_api.websocket_command({vol.Required("type"): "dimotic_plans/floorplans/get", vol.Required("id"): str})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_get(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Un plan complet, avec l'entity_id ACTUEL de chaque objet."""
+    store = _store(hass)
+    if store is None:
+        connection.send_error(msg["id"], "not_configured", "Intégration Plans non configurée.")
+        return
+    plan = store.floorplans.get(msg["id"])
+    if plan is None:
+        connection.send_error(msg["id"], "not_found", "Plan inconnu.")
+        return
+    registry = er.async_get(hass)
+    connection.send_result(msg["id"], {
+        "id": msg["id"],
+        "filename": plan.get("filename", ""),
+        "positions": resolve_positions(plan.get("positions", []), registry.async_get),
+        "texts": plan.get("texts", []),
+    })
