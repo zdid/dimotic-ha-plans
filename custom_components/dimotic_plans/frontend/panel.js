@@ -1,6 +1,7 @@
-/* Plans — panneau personnalisé (Dimotic-HA Plans). v0.0.3 : un onglet par plan, objets placés sur l'image
- * (icône et couleur selon l'état, valeur des capteurs, mise à jour en direct), clic = fiche de l'entité (more-info).
- * La commande directe des objets et l'éditeur viennent ensuite (voir README). */
+/* Plans — panneau personnalisé (Dimotic-HA Plans). v0.0.6 : un onglet par plan, objets placés sur l'image
+ * (icône et couleur selon l'état, valeur des capteurs, mise à jour en direct).
+ * Clic : bascule marche/arrêt des objets tout-ou-rien (lumière, prise, ventilateur, booléen), fiche de l'entité pour les
+ * autres ; appui long ou clic droit : fiche de l'entité. L'éditeur vient ensuite (voir README). */
 (() => {
   const STYLE = `
     :host { display: flex; flex-direction: column; height: 100vh; height: 100dvh; background: var(--primary-background-color, #fafafa);
@@ -22,6 +23,8 @@
                 background: rgba(255,255,255,.92); border: 2px solid #9e9e9e; color: #616161; box-shadow: 0 1px 3px rgba(0,0,0,.35); }
     .obj.on .ico { border-color: #ffa000; color: #ffa000; background: #fff8e1; }
     .obj.unav .ico { border-style: dashed; opacity: .5; }
+    .obj.busy .ico { animation: busy 0.8s ease-in-out infinite; }
+    @keyframes busy { 50% { transform: scale(0.85); opacity: 0.6; } }
     .obj.orphan .ico { border-color: var(--error-color, #db4437); color: var(--error-color, #db4437); }
     .obj ha-state-icon, .obj ha-icon { --mdc-icon-size: 22px; }
     .obj .val { margin-top: 2px; padding: 1px 5px; border-radius: 8px; background: rgba(255,255,255,.92); color: #212121; font-size: 12px; font-weight: 500;
@@ -31,6 +34,8 @@
   `;
   const TEXT_PX = { small: 14, medium: 20, large: 28 };
   const ON_STATES = new Set(['on', 'open', 'opening', 'closing', 'heat', 'cool', 'heat_cool', 'auto', 'dry', 'fan_only', 'playing', 'home', 'unlocked']);
+  const TOGGLE_DOMAINS = new Set(['light', 'switch', 'fan', 'input_boolean']);
+  const LONG_PRESS_MS = 500;
   const VALUE_DOMAINS = new Set(['sensor', 'number', 'input_number']);
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -113,12 +118,56 @@
           const el = document.createElement('div');
           el.className = 'obj'; el.style.left = `${p.x * 100}%`; el.style.top = `${p.y * 100}%`;
           el.innerHTML = '<div class="ico"></div><div class="val" hidden></div>';
-          el.addEventListener('click', () => this.dispatchEvent(new CustomEvent('hass-more-info', { detail: { entityId: p.entity_id }, bubbles: true, composed: true })));
+          const o = { p, el, ico: el.firstChild, val: el.lastChild, last: undefined, busy: null };
+          this._bindPress(o);
           plan.appendChild(el);
-          return { p, el, ico: el.firstChild, val: el.lastChild, last: undefined };
+          return o;
         });
         this._refresh();
       } catch (err) { this._error(err); }
+    }
+
+    _moreInfo(entityId) {
+      /* Sur Android, l'appui long déclenche aussi « contextmenu » : une seule ouverture. */
+      const now = Date.now();
+      if (this._lastMoreInfo && this._lastMoreInfo.id === entityId && now - this._lastMoreInfo.t < 1000) return;
+      this._lastMoreInfo = { id: entityId, t: now };
+      this.dispatchEvent(new CustomEvent('hass-more-info', { detail: { entityId }, bubbles: true, composed: true }));
+    }
+
+    /* Clic court = action principale, appui long ou clic droit = fiche de l'entité. */
+    _bindPress(o) {
+      let timer = null, long = false;
+      const cancel = () => { clearTimeout(timer); timer = null; };
+      o.el.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        long = false; cancel();
+        timer = setTimeout(() => { long = true; timer = null; this._moreInfo(o.p.entity_id); }, LONG_PRESS_MS);
+      });
+      o.el.addEventListener('pointerup', cancel);
+      o.el.addEventListener('pointerleave', cancel);
+      o.el.addEventListener('pointercancel', cancel);
+      o.el.addEventListener('contextmenu', (e) => { e.preventDefault(); cancel(); long = true; this._moreInfo(o.p.entity_id); });
+      o.el.addEventListener('click', (e) => { e.preventDefault(); if (long) { long = false; return; } this._action(o); });
+    }
+
+    async _action(o) {
+      const id = o.p.entity_id;
+      const st = this._hass.states[id];
+      const domain = id.split('.')[0];
+      if (!st || !TOGGLE_DOMAINS.has(domain) || st.state === 'unavailable') { this._moreInfo(id); return; }
+      if (o.busy) return;
+      o.busy = st; o.el.classList.add('busy');
+      const done = () => { o.busy = null; o.el.classList.remove('busy'); };
+      const guard = setTimeout(done, 5000);
+      try {
+        await this._hass.callService(domain, st.state === 'on' ? 'turn_off' : 'turn_on', { entity_id: id });
+      } catch (err) {
+        clearTimeout(guard); done();
+        this.dispatchEvent(new CustomEvent('hass-notification', { detail: { message: `${st.attributes.friendly_name || id} : ${(err && err.message) || err}` }, bubbles: true, composed: true }));
+        return;
+      }
+      o.guard = guard;
     }
 
     /* Plus grande taille de l'image qui tient dans la zone, proportions gardées. */
@@ -137,11 +186,12 @@
       if (!this._hass || !this._objs.length) return;
       for (const o of this._objs) {
         const st = this._hass.states[o.p.entity_id];
+        if (o.busy && st !== o.busy) { clearTimeout(o.guard); o.busy = null; }
         if (st === o.last && o.ico.firstChild) continue;
         o.last = st;
         const domain = o.p.entity_id.split('.')[0];
         const name = st ? (st.attributes.friendly_name || o.p.entity_id) : o.p.entity_id;
-        o.el.className = 'obj' + (!st ? ' orphan' : st.state === 'unavailable' || st.state === 'unknown' ? ' unav' : ON_STATES.has(st.state) ? ' on' : '');
+        o.el.className = 'obj' + (o.busy ? ' busy' : '') + (!st ? ' orphan' : st.state === 'unavailable' || st.state === 'unknown' ? ' unav' : ON_STATES.has(st.state) ? ' on' : '');
         let icon = o.ico.firstChild;
         if (st) {
           if (!icon || icon.localName !== 'ha-state-icon') { o.ico.innerHTML = ''; icon = document.createElement('ha-state-icon'); o.ico.appendChild(icon); }
