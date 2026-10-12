@@ -30,7 +30,7 @@ Le panneau est visible par **tous les utilisateurs** de HA ; l'import (et le fut
 
 ## Feuille de route
 
-Conception complète : [`conception-haplan-dans-ha`](https://github.com/zdid/dimotic-ha/blob/main/specs/current/conception-haplan-dans-ha_specs_v1.1.md)
+Conception complète : [`conception-haplan-dans-ha`](https://github.com/zdid/dimotic-ha/blob/main/specs/current/conception-haplan-dans-ha_specs_v1.2.md)
 dans le dépôt dimotic-ha.
 
 1. ✅ Dépôt, stockage dans HA, panneau (squelette, v0.0.1).
