@@ -115,7 +115,7 @@ def resolve_positions(positions: list[dict[str, Any]], lookup: Any) -> list[dict
     return out
 
 
-@websocket_api.websocket_command({vol.Required("type"): "dimotic_plans/floorplans/get", vol.Required("id"): str})
+@websocket_api.websocket_command({vol.Required("type"): "dimotic_plans/floorplans/get", vol.Required("plan_id"): str})
 @websocket_api.async_response
 async def ws_get(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Un plan complet, avec l'entity_id ACTUEL de chaque objet."""
@@ -123,13 +123,13 @@ async def ws_get(hass: HomeAssistant, connection: websocket_api.ActiveConnection
     if store is None:
         connection.send_error(msg["id"], "not_configured", "Intégration Plans non configurée.")
         return
-    plan = store.floorplans.get(msg["id"])
+    plan = store.floorplans.get(msg["plan_id"])
     if plan is None:
         connection.send_error(msg["id"], "not_found", "Plan inconnu.")
         return
     registry = er.async_get(hass)
     connection.send_result(msg["id"], {
-        "id": msg["id"],
+        "id": msg["plan_id"],
         "filename": plan.get("filename", ""),
         "positions": resolve_positions(plan.get("positions", []), registry.async_get),
         "texts": plan.get("texts", []),

@@ -5,7 +5,7 @@ réglables), pour afficher les plans de la maison avec les objets placés dessus
 les commander, et à terme les créer et les modifier — **sans passer par dimotic-ha**. Il remplace l'outil HAPLAN de
 [dimotic-ha](https://github.com/zdid/dimotic-ha).
 
-> **État : v0.0.4.** Le panneau « Plans » affiche un onglet par plan, avec les **objets placés sur l'image** : icône selon
+> **État : v0.0.5.** Le panneau « Plans » affiche un onglet par plan, avec les **objets placés sur l'image** : icône selon
 > l'entité et son état (allumé/ouvert en orange, indisponible en pointillé), valeur des capteurs, température des
 > thermostats, position des volets, mise à jour en direct ; un clic ouvre la fiche de l'entité (avec ses commandes).
 > Les objets suivent les renommages d'entités (lien par l'identifiant du registre). L'**import** des plans HAPLAN de

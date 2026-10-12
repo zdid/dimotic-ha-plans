@@ -90,7 +90,7 @@
       try { localStorage.setItem('dimotic_plans.current', id); } catch (_e) { /* stockage indisponible */ }
       const main = this.shadowRoot.getElementById('main');
       try {
-        const detail = await this._hass.callWS({ type: 'dimotic_plans/floorplans/get', id });
+        const detail = await this._hass.callWS({ type: 'dimotic_plans/floorplans/get', plan_id: id });
         let src = '';
         try { src = (await this._hass.callWS({ type: 'auth/sign_path', path: '/api/dimotic_plans/image/' + encodeURIComponent(detail.filename) })).path; } catch (_e) { /* image absente */ }
         if (this._current !== id) return;
