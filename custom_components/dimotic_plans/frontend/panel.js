@@ -1,4 +1,4 @@
-/* Plans — panneau personnalisé (Dimotic-HA Plans). v0.1.1
+/* Plans — panneau personnalisé (Dimotic-HA Plans). v0.1.2
  * Affichage : un onglet par plan, objets placés sur l'image (icône seule, colorée selon l'état ; valeur des capteurs à
  * droite de l'icône ; mise à jour en direct). Point d'ancrage d'un objet = coin inférieur gauche de son icône ; d'un
  * texte = coin inférieur gauche du texte (alignements faciles).
@@ -511,51 +511,62 @@
       });
     }
 
-    /* Description d'une entité pour le choix d'objet : nom, pièce, appareil (registres de HA exposés au panneau). */
+    /* Description d'une entité pour le choix d'objet : taxonomie QUOI/OÙ posée par nommage (attribut `attributs_taxonomie`),
+     * et entités secondaires (diagnostic, configuration, masquées : boutons RFXCOM…) repérées par les registres de HA. */
     _describe(s) {
-      const h = this._hass;
-      const ent = (h.entities || {})[s.entity_id] || {};
-      const dev = ent.device_id ? (h.devices || {})[ent.device_id] || {} : {};
-      const areaId = ent.area_id || dev.area_id;
-      const area = areaId && h.areas && h.areas[areaId] ? h.areas[areaId].name : '';
-      const device = dev.name_by_user || dev.name || '';
+      const ent = (this._hass.entities || {})[s.entity_id] || {};
+      const tax = s.attributes.attributs_taxonomie || null;
+      const t = (k) => (tax && typeof tax[k] === 'string' ? tax[k] : '');
       return {
         id: s.entity_id,
         name: s.attributes.friendly_name || s.entity_id,
-        area, device, maker: dev.manufacturer || '',
+        tax: !!tax,
+        quoi: t('quoi'), quoiAppareil: t('quoi_appareil'),
+        lieu: t('lieu_principal'), precis: t('lieu_precis'), pere: t('lieu_pere'),
         secondary: !!ent.hidden || ent.entity_category === 'diagnostic' || ent.entity_category === 'config',
       };
     }
 
     _addObject() {
       const used = new Set(this._draft.positions.map((p) => p.entity_id));
-      const all = Object.values(this._hass.states)
-        .filter((s) => !used.has(s.entity_id))
-        .map((s) => this._describe(s))
-        .sort((a, b) => (a.area || '\uffff').localeCompare(b.area || '\uffff', 'fr') || a.name.localeCompare(b.name, 'fr'));
+      const all = Object.values(this._hass.states).filter((s) => !used.has(s.entity_id)).map((s) => this._describe(s));
+      const count = (key) => {
+        const c = new Map();
+        for (const e of all) if (e.tax && !e.secondary && e[key]) c.set(e[key], (c.get(e[key]) || 0) + 1);
+        return [...c.keys()].sort((a, b) => a.localeCompare(b, 'fr'));
+      };
+      const opts = (values, label) => `<option value="">${label}</option>` + values.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
       const ov = document.createElement('div');
       ov.className = 'overlay';
       ov.innerHTML = `<div class="dialog"><h2>Ajouter un objet</h2>
-        <input type="search" id="q" placeholder="Rechercher : nom, pièce, appareil, fabricant (ex. rfxcom salle)…" autocomplete="off">
-        <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="sec">Afficher aussi les entités secondaires (boutons, diagnostic, configuration, masquées)</label>
+        <div class="row"><label>QUOI<select id="fquoi">${opts(count('quoi'), 'Tous')}</select></label>
+          <label>Lieu<select id="flieu">${opts(count('lieu'), 'Tous')}</select></label></div>
+        <input type="search" id="q" placeholder="Rechercher (QUOI, lieu, nom)…" autocomplete="off">
+        <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="sec">Toutes les entités (sans taxonomie, boutons, diagnostic, configuration, masquées)</label>
         <div class="pick" id="list"></div>
         <div class="btns"><button type="button" class="cancel">Annuler</button></div></div>`;
       const close = () => ov.remove();
       ov.addEventListener('pointerdown', (e) => { if (e.target === ov) close(); });
       ov.querySelector('.cancel').addEventListener('click', close);
-      const list = ov.querySelector('#list'), q = ov.querySelector('#q'), sec = ov.querySelector('#sec');
+      const $ = (id) => ov.querySelector('#' + id);
+      const list = $('list'), q = $('q'), sec = $('sec'), fquoi = $('fquoi'), flieu = $('flieu');
+      const key = (e) => `${e.lieu || '\uffff'}|${e.quoi || '\uffff'}|${e.precis}|${e.name}`;
       const render = () => {
         const words = q.value.toLowerCase().split(/\s+/).filter(Boolean);
-        const found = all.filter((e) => (sec.checked || !e.secondary)
-          && words.every((w) => [e.name, e.id, e.area, e.device, e.maker].some((v) => v.toLowerCase().includes(w)))).slice(0, 100);
+        const found = all.filter((e) => (sec.checked || (e.tax && !e.secondary))
+          && (!fquoi.value || e.quoi === fquoi.value) && (!flieu.value || e.lieu === flieu.value)
+          && words.every((w) => [e.quoi, e.quoiAppareil, e.lieu, e.precis, e.pere, e.name, e.id].some((v) => v.toLowerCase().includes(w))))
+          .sort((a, b) => key(a).localeCompare(key(b), 'fr')).slice(0, 150);
         list.innerHTML = found.length ? '' : '<div class="muted">Aucune entité</div>';
         for (const e of found) {
           const row = document.createElement('div');
           const icon = document.createElement('ha-state-icon');
           icon.hass = this._hass; icon.stateObj = this._hass.states[e.id];
           const label = document.createElement('span');
-          const where = [e.area, e.device && e.device !== e.name ? e.device : '', e.maker].filter(Boolean).join(' · ');
-          label.innerHTML = `${esc(e.name)}<small>${esc(where ? where + ' — ' : '')}${esc(e.id)}</small>`;
+          const title = e.tax ? [e.quoi, e.precis].filter(Boolean).join(' · ') : e.name;
+          const where = e.tax ? [e.lieu, e.pere].filter(Boolean).join(', ') : '';
+          const appareil = e.quoiAppareil && e.quoiAppareil !== e.quoi ? ` (${e.quoiAppareil})` : '';
+          label.innerHTML = `${esc(title)}${esc(appareil)}<small>${esc(where ? where + ' — ' : '')}${esc(e.tax ? e.name + ' — ' : '')}${esc(e.id)}</small>`;
           row.append(icon, label);
           row.addEventListener('click', () => {
             close();
@@ -567,11 +578,10 @@
           list.appendChild(row);
         }
       };
-      q.addEventListener('input', render);
-      sec.addEventListener('change', render);
+      for (const el of [q, sec, fquoi, flieu]) el.addEventListener(el === q ? 'input' : 'change', render);
       q.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
       this.shadowRoot.appendChild(ov);
-      render(); q.focus();
+      render(); fquoi.focus();
     }
 
     async _editText(index) {
