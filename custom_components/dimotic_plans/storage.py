@@ -4,7 +4,8 @@ Forme (reprise de HAPLAN de dimotic-ha, voir la conception « HAPLAN dans HA »)
   { "floorplans": { "<id>": { "filename": "plan.png",
                               "positions": [ { "entity_id": "light.x", "registry_id": "<id du registre>|null", "x": 0.5, "y": 0.2 } ],
                               "texts": [ { "id": "t1", "text": "Salon", "x": 0.1, "y": 0.1, "size": "medium", "color": "#FFFFFF" } ] } } }
-x et y sont normalisés entre 0 et 1. `registry_id` est l'identifiant stable du registre d'entités : il survit aux
+x et y sont normalisés entre 0 et 1 et désignent le COIN INFÉRIEUR GAUCHE de l'icône (objet) ou du texte (depuis v0.1.0 ;
+HAPLAN de dimotic-ha utilisait le centre : un import HAPLAN doit être converti, voir README). `registry_id` est l'identifiant stable du registre d'entités : il survit aux
 renommages d'`entity_id` (les positions ne deviennent plus obsolètes).
 """
 

@@ -34,4 +34,8 @@ class PlanImageView(HomeAssistantView):
             return web.Response(status=404)
         data = await hass.async_add_executor_job(path.read_bytes)
         ctype = mimetypes.guess_type(filename)[0] or "application/octet-stream"
-        return web.Response(body=data, content_type=ctype, headers={"Cache-Control": "private, max-age=300"})
+        headers = {"Cache-Control": "private, max-age=300", "X-Content-Type-Options": "nosniff"}
+        if filename.lower().endswith(".svg"):
+            # Un SVG téléversé ne doit jamais exécuter de script s'il est ouvert directement.
+            headers["Content-Security-Policy"] = "sandbox; default-src 'none'; style-src 'unsafe-inline'"
+        return web.Response(body=data, content_type=ctype, headers=headers)

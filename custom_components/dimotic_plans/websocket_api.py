@@ -1,4 +1,4 @@
-"""Commandes WebSocket des plans (réservées aux administrateurs de HA)."""
+"""Commandes WebSocket des plans : lecture pour tous les utilisateurs, import et éditeur réservés aux administrateurs."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 
 from .const import DOMAIN, IMAGES_DIR, MAX_IMAGE_BYTES
+from .editor import EditError, blank_svg, clean_plan_id, clean_positions, clean_texts, image_extension, new_image_name
 from .importer import ImportError_, normalize, valid_image_name
 
 
@@ -26,6 +27,8 @@ def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_list)
     websocket_api.async_register_command(hass, ws_import)
     websocket_api.async_register_command(hass, ws_get)
+    for handler in (ws_save, ws_create, ws_rename, ws_delete, ws_set_image):
+        websocket_api.async_register_command(hass, handler)
 
 
 @websocket_api.websocket_command({vol.Required("type"): "dimotic_plans/floorplans/list"})
@@ -134,3 +137,158 @@ async def ws_get(hass: HomeAssistant, connection: websocket_api.ActiveConnection
         "positions": resolve_positions(plan.get("positions", []), registry.async_get),
         "texts": plan.get("texts", []),
     })
+
+
+# --- Éditeur (administrateurs) ---------------------------------------------------------------------------------------
+
+IMAGE_SCHEMA = vol.Schema({vol.Required("name"): str, vol.Required("data"): str})
+
+
+def _decode_image(image: dict[str, str]) -> tuple[str, bytes]:
+    ext = image_extension(image["name"])
+    try:
+        data = base64.b64decode(image["data"], validate=True)
+    except ValueError as err:
+        raise EditError("image illisible") from err
+    if not data or len(data) > MAX_IMAGE_BYTES:
+        raise EditError("image vide ou trop volumineuse (10 Mo au plus)")
+    return ext, data
+
+
+def _remove_unused_image(directory: Path, name: str) -> None:
+    if valid_image_name(name):
+        (directory / name).unlink(missing_ok=True)
+
+
+async def _editor_call(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any], work) -> None:
+    """Exécute `work(store)` ; transforme les refus (EditError) en erreur WebSocket lisible."""
+    store = _store(hass)
+    if store is None:
+        connection.send_error(msg["id"], "not_configured", "Intégration Plans non configurée.")
+        return
+    try:
+        result = await work(store)
+    except EditError as err:
+        connection.send_error(msg["id"], "invalid", str(err))
+        return
+    store.async_schedule_save()
+    connection.send_result(msg["id"], result)
+
+
+def _plan_or_error(store, plan_id: str) -> dict[str, Any]:
+    plan = store.floorplans.get(plan_id)
+    if plan is None:
+        raise EditError("plan inconnu")
+    return plan
+
+
+def _images_dir(hass: HomeAssistant) -> Path:
+    return Path(hass.config.path(IMAGES_DIR))
+
+
+def _image_in_use(store, name: str) -> bool:
+    return any(p.get("filename") == name for p in store.floorplans.values())
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "dimotic_plans/floorplans/save",
+    vol.Required("plan_id"): str,
+    vol.Required("positions"): list,
+    vol.Required("texts"): list,
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_save(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Remplace les objets et les textes d'un plan (enregistrement de l'éditeur)."""
+    async def work(store):
+        plan = _plan_or_error(store, msg["plan_id"])
+        positions = clean_positions(msg["positions"])
+        texts = clean_texts(msg["texts"])
+        registry = er.async_get(hass)
+        previous = {p["entity_id"]: p.get("registry_id") for p in plan.get("positions", [])}
+        for pos in positions:
+            entry = registry.async_get(pos["entity_id"])
+            # Objet orphelin conservé tel quel : on garde l'identifiant qu'il avait.
+            pos["registry_id"] = entry.id if entry is not None else previous.get(pos["entity_id"])
+        plan["positions"] = positions
+        plan["texts"] = texts
+        return {"positions": len(positions), "texts": len(texts)}
+    await _editor_call(hass, connection, msg, work)
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "dimotic_plans/floorplans/create",
+    vol.Required("plan_id"): str,
+    vol.Optional("image"): IMAGE_SCHEMA,
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_create(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Nouveau plan, avec une image téléversée ou une page blanche."""
+    async def work(store):
+        plan_id = clean_plan_id(msg["plan_id"])
+        if plan_id in store.floorplans:
+            raise EditError("un plan porte déjà ce nom")
+        ext, data = _decode_image(msg["image"]) if "image" in msg else ("svg", blank_svg())
+        name = new_image_name(plan_id, ext)
+        await hass.async_add_executor_job(_write_images, _images_dir(hass), {name: data})
+        store.floorplans[plan_id] = {"filename": name, "positions": [], "texts": []}
+        return {"plan_id": plan_id, "filename": name}
+    await _editor_call(hass, connection, msg, work)
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "dimotic_plans/floorplans/rename",
+    vol.Required("plan_id"): str,
+    vol.Required("new_id"): str,
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_rename(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Renomme un plan en gardant sa place dans l'ordre des onglets."""
+    async def work(store):
+        _plan_or_error(store, msg["plan_id"])
+        new_id = clean_plan_id(msg["new_id"])
+        if new_id != msg["plan_id"] and new_id in store.floorplans:
+            raise EditError("un plan porte déjà ce nom")
+        reordered = {(new_id if k == msg["plan_id"] else k): v for k, v in store.floorplans.items()}
+        store.replace_all(reordered)
+        return {"plan_id": new_id}
+    await _editor_call(hass, connection, msg, work)
+
+
+@websocket_api.websocket_command({vol.Required("type"): "dimotic_plans/floorplans/delete", vol.Required("plan_id"): str})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_delete(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Supprime un plan (et son image si aucun autre plan ne l'utilise)."""
+    async def work(store):
+        plan = _plan_or_error(store, msg["plan_id"])
+        del store.floorplans[msg["plan_id"]]
+        name = plan.get("filename", "")
+        if name and not _image_in_use(store, name):
+            await hass.async_add_executor_job(_remove_unused_image, _images_dir(hass), name)
+        return {"deleted": msg["plan_id"]}
+    await _editor_call(hass, connection, msg, work)
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "dimotic_plans/floorplans/set_image",
+    vol.Required("plan_id"): str,
+    vol.Required("image"): IMAGE_SCHEMA,
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_set_image(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Change l'image d'un plan (objets et textes gardés à leurs positions relatives)."""
+    async def work(store):
+        plan = _plan_or_error(store, msg["plan_id"])
+        ext, data = _decode_image(msg["image"])
+        name = new_image_name(msg["plan_id"], ext)
+        await hass.async_add_executor_job(_write_images, _images_dir(hass), {name: data})
+        old = plan.get("filename", "")
+        plan["filename"] = name
+        if old and not _image_in_use(store, old):
+            await hass.async_add_executor_job(_remove_unused_image, _images_dir(hass), old)
+        return {"filename": name}
+    await _editor_call(hass, connection, msg, work)

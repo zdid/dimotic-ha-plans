@@ -5,13 +5,19 @@ réglables), pour afficher les plans de la maison avec les objets placés dessus
 les commander, et à terme les créer et les modifier — **sans passer par dimotic-ha**. Il remplace l'outil HAPLAN de
 [dimotic-ha](https://github.com/zdid/dimotic-ha).
 
-> **État : v0.0.6.** Le panneau « Plans » affiche un onglet par plan, avec les **objets placés sur l'image** : icône selon
-> l'entité et son état (allumé/ouvert en orange, indisponible en pointillé), valeur des capteurs, température des
-> thermostats, position des volets, mise à jour en direct. **Un clic allume/éteint** les lumières, prises, ventilateurs et booléens ; pour les autres
-> (volets, thermostats, capteurs…) il ouvre la fiche de l'entité. **Appui long ou clic droit** : fiche de l'entité.
-> Les objets suivent les renommages d'entités (lien par l'identifiant du registre). L'**import** des plans HAPLAN de
-> dimotic-ha passe par la commande WebSocket `dimotic_plans/floorplans/import` (administrateurs).
-> **L'éditeur n'est pas encore fait** — voir « Feuille de route ».
+> **État : v0.1.0.** Le panneau « Plans » affiche un onglet par plan, avec les **objets placés sur l'image** : icône seule,
+> colorée selon l'état (allumé/ouvert en orange, indisponible très pâle), valeur des capteurs, température des thermostats
+> et position des volets à droite de l'icône, mise à jour en direct. **Un clic allume/éteint** les lumières, prises,
+> ventilateurs et booléens ; pour les autres (volets, thermostats, capteurs…) il ouvre la fiche de l'entité.
+> **Appui long ou clic droit** : fiche de l'entité. Les objets suivent les renommages d'entités (lien par l'identifiant
+> du registre).
+>
+> **Éditeur (administrateurs, bouton « Modifier »)** : glisser les objets et les textes (souris ou doigt), flèches du
+> clavier (1 px, Maj : 10 px), **magnétisme** sur les autres éléments (ligne rose), ajouter/retirer un objet ou un texte,
+> créer un plan (image ou page blanche), le renommer, changer son image, le supprimer. Rien n'est écrit avant « Enregistrer ».
+>
+> **Point d'ancrage** : la position d'un objet est le **coin inférieur gauche de son icône**, celle d'un texte le coin
+> inférieur gauche du texte (alignements faciles). x et y sont en fraction de l'image (0 à 1).
 
 ## Installation (HACS)
 
@@ -31,7 +37,7 @@ dans le dépôt dimotic-ha.
 2. ✅ (v0.0.2) **Import** des plans, images, textes et positions de HAPLAN, avec lien stable vers le registre d'entités de HA
    (les positions survivent aux renommages d'entités).
 3. ✅ (v0.0.3) **Affichage** des objets dans le panneau ; (v0.0.6) **commande d'un clic**.
-4. ⏳ **Éditeur** : déplacer, ajouter, supprimer des objets et des textes, créer un plan, téléverser une image.
+4. ✅ (v0.1.0) **Éditeur**.
 5. ⏳ **Export** pour les écrans ESP32 (l'outil de génération lit les plans depuis HA).
 
 ## Développement

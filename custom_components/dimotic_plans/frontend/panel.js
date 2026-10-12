@@ -1,63 +1,121 @@
-/* Plans — panneau personnalisé (Dimotic-HA Plans). v0.0.6 : un onglet par plan, objets placés sur l'image
- * (icône et couleur selon l'état, valeur des capteurs, mise à jour en direct).
+/* Plans — panneau personnalisé (Dimotic-HA Plans). v0.1.0
+ * Affichage : un onglet par plan, objets placés sur l'image (icône seule, colorée selon l'état ; valeur des capteurs à
+ * droite de l'icône ; mise à jour en direct). Point d'ancrage d'un objet = coin inférieur gauche de son icône ; d'un
+ * texte = coin inférieur gauche du texte (alignements faciles).
  * Clic : bascule marche/arrêt des objets tout-ou-rien (lumière, prise, ventilateur, booléen), fiche de l'entité pour les
- * autres ; appui long ou clic droit : fiche de l'entité. L'éditeur vient ensuite (voir README). */
+ * autres ; appui long ou clic droit : fiche de l'entité.
+ * Éditeur (administrateurs) : déplacer (glisser, flèches du clavier), magnétisme sur les autres éléments, ajouter/retirer
+ * objets et textes, créer/renommer/supprimer un plan, changer son image. */
 (() => {
   const STYLE = `
     :host { display: flex; flex-direction: column; height: 100vh; height: 100dvh; background: var(--primary-background-color, #fafafa);
             color: var(--primary-text-color, #212121); overflow: hidden; font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif); }
     .top { flex: none; display: flex; align-items: center; gap: 8px; padding: 0 8px; min-height: 56px; background: var(--app-header-background-color, #03a9f4); color: var(--app-header-text-color, #fff); }
-    .title { font-size: 20px; }
+    .title { font-size: 20px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .top button { display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,.6); background: transparent; color: inherit;
+                  border-radius: 18px; padding: 6px 12px; font: inherit; cursor: pointer; }
+    .top button.main { background: #fff; color: var(--primary-color, #03a9f4); border-color: #fff; font-weight: 500; }
+    .top button[disabled] { opacity: .5; cursor: default; }
     .tabs { flex: none; display: flex; gap: 8px; padding: 8px 16px 0; overflow-x: auto; }
     .tab { border: 1px solid var(--divider-color, #ccc); background: var(--card-background-color, #fff); color: inherit; border-radius: 16px; padding: 6px 14px; cursor: pointer; white-space: nowrap; font: inherit; }
     .tab.on { background: var(--primary-color, #03a9f4); border-color: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff); }
+    .tab[disabled]:not(.on) { opacity: .5; cursor: default; }
+    .tools { flex: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 16px 0; align-items: center; }
+    .tools button { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--divider-color, #ccc); background: var(--card-background-color, #fff);
+                    color: inherit; border-radius: 8px; padding: 5px 10px; font: inherit; font-size: 14px; cursor: pointer; }
+    .tools button.danger { color: var(--error-color, #db4437); }
+    .tools button[disabled] { opacity: .45; cursor: default; }
+    .tools .sep { width: 1px; align-self: stretch; background: var(--divider-color, #ccc); margin: 0 4px; }
+    .tools ha-icon { --mdc-icon-size: 18px; }
+    .tools .hint { font-size: 13px; color: var(--secondary-text-color, #727272); }
     main { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px 16px; display: flex; flex-direction: column; align-items: center; }
     .card { background: var(--card-background-color, #fff); border-radius: 12px; padding: 16px; box-shadow: var(--ha-card-box-shadow, 0 1px 3px rgba(0,0,0,.2)); }
     .muted { color: var(--secondary-text-color, #727272); }
     .warn { color: var(--warning-color, #ff9800); }
-    .plan { position: relative; background: #fff; border-radius: 12px; box-shadow: var(--ha-card-box-shadow, 0 1px 3px rgba(0,0,0,.2)); line-height: 0; }
-    .plan img { display: block; width: 100%; height: 100%; border-radius: 12px; }
-    .obj { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; cursor: pointer;
+    .plan { position: relative; background: #fff; border-radius: 12px; box-shadow: var(--ha-card-box-shadow, 0 1px 3px rgba(0,0,0,.2)); line-height: 0; touch-action: manipulation; }
+    .plan.edit { outline: 2px dashed var(--primary-color, #03a9f4); outline-offset: 4px; }
+    .plan img { display: block; width: 100%; height: 100%; border-radius: 12px; pointer-events: none; user-select: none; }
+    .obj { position: absolute; transform: translateY(-100%); display: flex; flex-direction: row; align-items: center; gap: 2px; cursor: pointer;
            line-height: 1.1; -webkit-tap-highlight-color: transparent; user-select: none; }
-    .obj .ico { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-                background: rgba(255,255,255,.92); border: 2px solid #9e9e9e; color: #616161; box-shadow: 0 1px 3px rgba(0,0,0,.35); }
-    .obj.on .ico { border-color: #ffa000; color: #ffa000; background: #fff8e1; }
-    .obj.unav .ico { border-style: dashed; opacity: .5; }
+    .obj .ico { box-sizing: border-box; flex: none; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+                color: #424242; filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff); }
+    .obj.on .ico { color: #ff9800; }
+    .obj.unav .ico { opacity: .35; }
+    .obj.orphan .ico { color: var(--error-color, #db4437); }
     .obj.busy .ico { animation: busy 0.8s ease-in-out infinite; }
-    @keyframes busy { 50% { transform: scale(0.85); opacity: 0.6; } }
-    .obj.orphan .ico { border-color: var(--error-color, #db4437); color: var(--error-color, #db4437); }
-    .obj ha-state-icon, .obj ha-icon { --mdc-icon-size: 22px; }
-    .obj .val { margin-top: 2px; padding: 1px 5px; border-radius: 8px; background: rgba(255,255,255,.92); color: #212121; font-size: 12px; font-weight: 500;
-                box-shadow: 0 1px 2px rgba(0,0,0,.3); white-space: nowrap; }
-    .txt { position: absolute; transform: translate(-50%, -50%); line-height: 1.1; white-space: nowrap; pointer-events: none; font-weight: 500; }
+    @keyframes busy { 50% { transform: scale(0.8); opacity: 0.5; } }
+    .obj ha-state-icon, .obj ha-icon { --mdc-icon-size: 26px; }
+    .obj .val { padding: 0 4px; border-radius: 6px; background: rgba(255,255,255,.85); color: #212121; font-size: 12px; font-weight: 500; white-space: nowrap; }
+    .txt { position: absolute; transform: translateY(-100%); line-height: 1.1; white-space: nowrap; pointer-events: none; font-weight: 500; user-select: none; }
+    .edit .obj, .edit .txt { cursor: move; pointer-events: auto; touch-action: none; }
+    .edit .obj.sel .ico, .edit .txt.sel { outline: 2px solid var(--primary-color, #03a9f4); outline-offset: 1px; border-radius: 4px; }
+    .edit .obj::after, .edit .txt::after { content: ''; position: absolute; left: -3px; bottom: -3px; width: 6px; height: 6px; border-radius: 50%; background: var(--primary-color, #03a9f4); }
+    .guide { position: absolute; background: #e91e63; pointer-events: none; display: none; z-index: 5; }
+    .guide.v { top: 0; bottom: 0; width: 1px; } .guide.h { left: 0; right: 0; height: 1px; }
     .foot { margin-top: 8px; font-size: 13px; }
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 10; padding: 16px; }
+    .dialog { background: var(--card-background-color, #fff); color: var(--primary-text-color, #212121); border-radius: 12px; padding: 20px; width: min(460px, 100%);
+              max-height: 90vh; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.35); box-sizing: border-box; }
+    .dialog h2 { margin: 0; font-size: 20px; font-weight: 500; }
+    .dialog label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+    .dialog input[type=text], .dialog input[type=search], .dialog select { font: inherit; padding: 8px; border-radius: 6px; border: 1px solid var(--divider-color, #ccc);
+              background: var(--primary-background-color, #fff); color: inherit; }
+    .dialog .row { display: flex; gap: 12px; } .dialog .row > * { flex: 1; }
+    .dialog .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+    .dialog .btns button { font: inherit; border: none; border-radius: 6px; padding: 8px 14px; cursor: pointer; background: transparent; color: var(--primary-color, #03a9f4); }
+    .dialog .btns button.ok { background: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff); }
+    .dialog .btns button.ok.danger { background: var(--error-color, #db4437); }
+    .dialog .err { color: var(--error-color, #db4437); font-size: 14px; min-height: 1em; }
+    .pick { overflow: auto; min-height: 120px; max-height: 50vh; border: 1px solid var(--divider-color, #ccc); border-radius: 6px; }
+    .pick div { display: flex; align-items: center; gap: 10px; padding: 6px 10px; cursor: pointer; line-height: 1.2; }
+    .pick div:hover { background: var(--secondary-background-color, #f0f0f0); }
+    .pick small { display: block; color: var(--secondary-text-color, #727272); font-size: 12px; }
   `;
   const TEXT_PX = { small: 14, medium: 20, large: 28 };
   const ON_STATES = new Set(['on', 'open', 'opening', 'closing', 'heat', 'cool', 'heat_cool', 'auto', 'dry', 'fan_only', 'playing', 'home', 'unlocked']);
   const TOGGLE_DOMAINS = new Set(['light', 'switch', 'fan', 'input_boolean']);
-  const LONG_PRESS_MS = 500;
   const VALUE_DOMAINS = new Set(['sensor', 'number', 'input_number']);
+  const LONG_PRESS_MS = 500;
+  const SNAP_PX = 6;
+  const MAX_UPLOAD = 3 * 1024 * 1024;
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const clamp = (v) => Math.min(1, Math.max(0, v));
+  const fileToBase64 = (file) => new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1] || '');
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
 
   class PlansPanel extends HTMLElement {
     constructor() {
       super(); this._hass = null; this._narrow = false; this._built = false; this._title = 'Plans';
-      this._plans = []; this._current = null; this._detail = null; this._src = ''; this._objs = [];
+      this._plans = []; this._current = null; this._detail = null; this._src = ''; this._objs = []; this._texts = [];
+      this._edit = false; this._draft = null; this._dirty = false; this._sel = null;
       this.attachShadow({ mode: 'open' });
       this._ro = new ResizeObserver(() => this._fit());
+      this._onKey = (e) => this._key(e);
     }
-    set hass(hass) { this._hass = hass; if (!this._built) this._build(); if (this._menu) this._menu.hass = hass; this._refresh(); }
+    set hass(hass) {
+      const first = !this._hass; this._hass = hass;
+      if (!this._built) this._build();
+      if (this._menu) this._menu.hass = hass;
+      if (first) this._renderActions();
+      this._refresh();
+    }
     set narrow(value) { this._narrow = value; if (this._menu) this._menu.narrow = value; }
     set panel(p) { this._title = (p && p.config && p.config.title) || 'Plans'; if (this._titleEl) this._titleEl.textContent = this._title; }
     set route(_r) {}
-    disconnectedCallback() { this._ro.disconnect(); }
-    connectedCallback() { const m = this.shadowRoot.getElementById('main'); if (m) this._ro.observe(m); }
+    connectedCallback() { const m = this.shadowRoot.getElementById('main'); if (m) this._ro.observe(m); window.addEventListener('keydown', this._onKey); }
+    disconnectedCallback() { this._ro.disconnect(); window.removeEventListener('keydown', this._onKey); }
+    get _admin() { return !!(this._hass && this._hass.user && this._hass.user.is_admin); }
 
     _build() {
       this._built = true;
       this.shadowRoot.innerHTML = `<style>${STYLE}</style>
-        <div class="top"><ha-menu-button></ha-menu-button><span class="title" id="title">${esc(this._title)}</span></div>
+        <div class="top"><ha-menu-button></ha-menu-button><span class="title" id="title">${esc(this._title)}</span><span id="actions"></span></div>
         <div class="tabs" id="tabs"></div>
+        <div class="tools" id="tools" hidden></div>
         <main id="main"><div class="card muted">Chargement des plans…</div></main>`;
       this._menu = this.shadowRoot.querySelector('ha-menu-button'); this._menu.hass = this._hass; this._menu.narrow = this._narrow;
       this._titleEl = this.shadowRoot.getElementById('title');
@@ -69,68 +127,208 @@
       this.shadowRoot.getElementById('main').innerHTML = `<div class="card"><b>Erreur</b><p class="muted">${esc((err && err.message) || err)}</p></div>`;
     }
 
-    async _loadList() {
+    _toast(message) {
+      this.dispatchEvent(new CustomEvent('hass-notification', { detail: { message }, bubbles: true, composed: true }));
+    }
+
+    async _loadList(wanted) {
       try {
         const res = await this._hass.callWS({ type: 'dimotic_plans/floorplans/list' });
         this._plans = res.floorplans;
         if (!this._plans.length) {
-          this.shadowRoot.getElementById('main').innerHTML = '<div class="card"><b>Aucun plan pour le moment.</b><p class="muted">L\'éditeur arrive dans une prochaine version.</p></div>';
+          this._current = null; this._detail = null; this._draft = null; this._objs = []; this._texts = [];
+          this._renderTabs(); this._renderTools();
+          this.shadowRoot.getElementById('main').innerHTML = `<div class="card"><b>Aucun plan pour le moment.</b>
+            <p class="muted">${this._admin ? 'Passe en mode Modifier puis « Nouveau plan ».' : 'Un administrateur doit d\'abord créer un plan.'}</p></div>`;
           return;
         }
-        let saved = null; try { saved = localStorage.getItem('dimotic_plans.current'); } catch (_e) { /* stockage indisponible */ }
-        this._renderTabs();
-        this._show(this._plans.some((p) => p.id === saved) ? saved : this._plans[0].id);
+        let saved = wanted || null;
+        if (!saved) { try { saved = localStorage.getItem('dimotic_plans.current'); } catch (_e) { /* stockage indisponible */ } }
+        await this._show(this._plans.some((p) => p.id === saved) ? saved : this._plans[0].id);
       } catch (err) { this._error(err); }
+    }
+
+    /* ---------- Barre du haut, onglets, outils ---------- */
+
+    _renderActions() {
+      const box = this.shadowRoot.getElementById('actions');
+      if (!box) return;
+      if (!this._admin) { box.innerHTML = ''; return; }
+      box.innerHTML = !this._edit
+        ? '<button id="editbtn"><ha-icon icon="mdi:pencil" style="--mdc-icon-size:18px"></ha-icon>Modifier</button>'
+        : this._dirty
+          ? '<button id="cancel">Annuler</button> <button class="main" id="save">Enregistrer</button>'
+          : '<button class="main" id="done">Terminer</button>';
+      const on = (id, fn) => { const b = box.querySelector('#' + id); if (b) b.addEventListener('click', fn); };
+      on('editbtn', () => this._enterEdit());
+      on('cancel', () => this._cancelEdit());
+      on('save', () => this._save());
+      on('done', () => this._leaveEdit());
     }
 
     _renderTabs() {
       const tabs = this.shadowRoot.getElementById('tabs');
-      tabs.style.display = this._plans.length > 1 ? '' : 'none';
-      tabs.innerHTML = this._plans.map((p) => `<button class="tab${p.id === this._current ? ' on' : ''}" data-id="${esc(p.id)}">${esc(p.id)}</button>`).join('');
-      tabs.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => this._show(b.dataset.id)));
+      tabs.style.display = this._plans.length > 1 || this._edit ? '' : 'none';
+      const lock = this._edit && this._dirty;
+      tabs.innerHTML = this._plans.map((p) => `<button class="tab${p.id === this._current ? ' on' : ''}" data-id="${esc(p.id)}" ${lock ? 'disabled' : ''}>${esc(p.id)}</button>`).join('');
+      tabs.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => { if (!b.disabled && b.dataset.id !== this._current) this._show(b.dataset.id); }));
     }
 
+    _renderTools() {
+      const tools = this.shadowRoot.getElementById('tools');
+      tools.hidden = !this._edit;
+      if (!this._edit) { tools.innerHTML = ''; return; }
+      const has = !!this._draft, d = this._dirty, sel = this._sel;
+      const b = (id, icon, label, opts = {}) => `<button id="${id}" class="${opts.danger ? 'danger' : ''}" ${opts.off ? 'disabled' : ''} title="${esc(opts.title || '')}"><ha-icon icon="${icon}"></ha-icon>${label}</button>`;
+      const planTitle = d ? 'Enregistre ou annule d\'abord les changements du plan' : '';
+      tools.innerHTML = [
+        b('addobj', 'mdi:plus-circle-outline', 'Objet', { off: !has }),
+        b('addtxt', 'mdi:format-text', 'Texte', { off: !has }),
+        sel ? '<span class="sep"></span>' : '',
+        sel && sel.kind === 'txt' ? b('edittxt', 'mdi:pencil-outline', 'Modifier le texte') : '',
+        sel && sel.kind === 'obj' ? b('info', 'mdi:information-outline', 'Fiche') : '',
+        sel ? b('delsel', 'mdi:close-circle-outline', 'Retirer', { danger: true }) : '',
+        '<span class="sep"></span>',
+        b('newplan', 'mdi:file-plus-outline', 'Nouveau plan', { off: d, title: planTitle }),
+        b('renplan', 'mdi:rename-outline', 'Renommer', { off: d || !has, title: planTitle }),
+        b('imgplan', 'mdi:image-edit-outline', 'Image', { off: d || !has, title: planTitle }),
+        b('delplan', 'mdi:delete-outline', 'Supprimer le plan', { off: d || !has, danger: true, title: planTitle }),
+        `<span class="hint">${sel ? 'Flèches : 1 px (Maj : 10 px) · Suppr : retirer · Échap : désélectionner' : 'Glisse un élément pour le déplacer (il se cale sur les autres), clique pour le sélectionner.'}</span>`,
+      ].join('');
+      const on = (id, fn) => { const el = tools.querySelector('#' + id); if (el) el.addEventListener('click', () => { if (!el.disabled) fn(); }); };
+      on('addobj', () => this._addObject());
+      on('addtxt', () => this._editText(null));
+      on('edittxt', () => this._editText(sel.index));
+      on('info', () => this._moreInfo(this._draft.positions[sel.index].entity_id, true));
+      on('delsel', () => this._removeSelected());
+      on('newplan', () => this._newPlan());
+      on('renplan', () => this._renamePlan());
+      on('imgplan', () => this._changeImage());
+      on('delplan', () => this._deletePlan());
+    }
+
+    _setDirty() {
+      if (!this._dirty) { this._dirty = true; this._renderActions(); this._renderTabs(); }
+      this._renderTools();
+    }
+
+    /* ---------- Affichage d'un plan ---------- */
+
     async _show(id) {
-      this._current = id; this._renderTabs();
+      this._current = id; this._sel = null; this._renderTabs();
       try { localStorage.setItem('dimotic_plans.current', id); } catch (_e) { /* stockage indisponible */ }
-      const main = this.shadowRoot.getElementById('main');
       try {
         const detail = await this._hass.callWS({ type: 'dimotic_plans/floorplans/get', plan_id: id });
         let src = '';
         try { src = (await this._hass.callWS({ type: 'auth/sign_path', path: '/api/dimotic_plans/image/' + encodeURIComponent(detail.filename) })).path; } catch (_e) { /* image absente */ }
         if (this._current !== id) return;
-        this._detail = detail;
-        const orphans = detail.positions.filter((p) => p.orphan).length;
-        main.innerHTML = `<div class="plan" id="plan">${src ? `<img id="img" src="${src}" alt="${esc(id)}">` : ''}</div>
-          <div class="foot muted">${detail.positions.length} objet(s)${orphans ? ` · <span class="warn">${orphans} orphelin(s)</span>` : ''}</div>`;
-        const plan = main.querySelector('#plan');
-        const img = main.querySelector('#img');
-        if (img) img.addEventListener('load', () => this._fit());
-        else { plan.style.width = '600px'; plan.style.height = '400px'; }
-        for (const t of detail.texts || []) {
-          const el = document.createElement('div');
-          el.className = 'txt'; el.textContent = t.text;
-          const light = /^#?(f{3}|f{6})$/i.test(String(t.color || '').trim());
-          el.style.cssText = `left:${t.x * 100}%;top:${t.y * 100}%;font-size:${TEXT_PX[t.size] || 20}px;color:${light ? '#212121' : (t.color || '#212121')}`;
-          plan.appendChild(el);
-        }
-        this._objs = detail.positions.map((p) => {
-          const el = document.createElement('div');
-          el.className = 'obj'; el.style.left = `${p.x * 100}%`; el.style.top = `${p.y * 100}%`;
-          el.innerHTML = '<div class="ico"></div><div class="val" hidden></div>';
-          const o = { p, el, ico: el.firstChild, val: el.lastChild, last: undefined, busy: null };
-          this._bindPress(o);
-          plan.appendChild(el);
-          return o;
-        });
-        this._refresh();
+        this._detail = detail; this._src = src;
+        this._draft = this._edit ? this._copy(detail) : null;
+        this._dirty = false; this._renderActions(); this._renderTabs(); this._renderTools();
+        this._renderPlan();
       } catch (err) { this._error(err); }
     }
 
-    _moreInfo(entityId) {
+    _copy(detail) {
+      return { positions: detail.positions.map((p) => ({ ...p })), texts: (detail.texts || []).map((t) => ({ ...t })) };
+    }
+
+    _data() { return this._edit ? this._draft : this._detail; }
+
+    _renderPlan() {
+      const main = this.shadowRoot.getElementById('main');
+      const data = this._data();
+      if (!data) return;
+      const orphans = data.positions.filter((p) => p.orphan).length;
+      main.innerHTML = `<div class="plan${this._edit ? ' edit' : ''}" id="plan">${this._src ? `<img id="img" src="${this._src}" alt="${esc(this._current)}">` : ''}
+          <div class="guide v" id="gv"></div><div class="guide h" id="gh"></div></div>
+        <div class="foot muted">${data.positions.length} objet(s)${orphans ? ` · <span class="warn">${orphans} orphelin(s)</span>` : ''}${data.texts.length ? ` · ${data.texts.length} texte(s)` : ''}</div>`;
+      const plan = main.querySelector('#plan');
+      const img = main.querySelector('#img');
+      if (img) { if (img.complete) this._fit(); img.addEventListener('load', () => this._fit()); } else { plan.style.width = '600px'; plan.style.height = '400px'; }
+      if (this._edit) plan.addEventListener('pointerdown', (e) => { if (e.target === plan || e.target === img) this._select(null); });
+      this._texts = data.texts.map((t, index) => {
+        const el = document.createElement('div');
+        el.className = 'txt';
+        plan.appendChild(el);
+        const o = { kind: 'txt', index, el };
+        this._styleText(o);
+        if (this._edit) this._bindDrag(o);
+        return o;
+      });
+      this._objs = data.positions.map((p, index) => {
+        const el = document.createElement('div');
+        el.className = 'obj'; el.style.left = `${p.x * 100}%`; el.style.top = `${p.y * 100}%`;
+        el.innerHTML = '<div class="ico"></div><div class="val" hidden></div>';
+        const o = { kind: 'obj', index, p, el, ico: el.firstChild, val: el.lastChild, last: undefined, busy: null };
+        if (this._edit) this._bindDrag(o); else this._bindPress(o);
+        plan.appendChild(el);
+        return o;
+      });
+      this._markSelection();
+      this._refresh();
+    }
+
+    _styleText(o) {
+      const t = this._data().texts[o.index];
+      o.el.textContent = t.text;
+      const light = /^#?(f{3}|f{6})$/i.test(String(t.color || '').trim());
+      o.el.style.cssText = `left:${t.x * 100}%;top:${t.y * 100}%;font-size:${TEXT_PX[t.size] || 20}px;color:${light ? '#212121' : (t.color || '#212121')}`;
+    }
+
+    /* Plus grande taille de l'image qui tient dans la zone, proportions gardées. */
+    _fit() {
+      const main = this.shadowRoot.getElementById('main');
+      const img = this.shadowRoot.getElementById('img');
+      const plan = this.shadowRoot.getElementById('plan');
+      if (!img || !plan || !img.naturalWidth) return;
+      const w = main.clientWidth - 32, h = main.clientHeight - 48;
+      const r = Math.min(w / img.naturalWidth, h / img.naturalHeight);
+      plan.style.width = `${Math.max(1, Math.floor(img.naturalWidth * r))}px`;
+      plan.style.height = `${Math.max(1, Math.floor(img.naturalHeight * r))}px`;
+    }
+
+    _refresh() {
+      if (!this._hass || !this._objs.length) return;
+      for (const o of this._objs) {
+        const st = this._hass.states[o.p.entity_id];
+        if (o.busy && st !== o.busy) { clearTimeout(o.guard); o.busy = null; }
+        if (st === o.last && o.ico.firstChild) continue;
+        o.last = st;
+        const domain = o.p.entity_id.split('.')[0];
+        const name = st ? (st.attributes.friendly_name || o.p.entity_id) : o.p.entity_id;
+        o.el.classList.toggle('busy', !!o.busy);
+        o.el.classList.toggle('orphan', !st);
+        o.el.classList.toggle('unav', !!st && (st.state === 'unavailable' || st.state === 'unknown'));
+        o.el.classList.toggle('on', !!st && ON_STATES.has(st.state));
+        let icon = o.ico.firstChild;
+        if (st) {
+          if (!icon || icon.localName !== 'ha-state-icon') { o.ico.innerHTML = ''; icon = document.createElement('ha-state-icon'); o.ico.appendChild(icon); }
+          icon.hass = this._hass; icon.stateObj = st;
+        } else if (!icon || icon.localName !== 'ha-icon') {
+          o.ico.innerHTML = '<ha-icon icon="mdi:help-circle-outline"></ha-icon>';
+        }
+        let val = '';
+        if (st && VALUE_DOMAINS.has(domain) && st.state !== 'unavailable' && st.state !== 'unknown') {
+          const n = Number(st.state);
+          const unit = st.attributes.unit_of_measurement || '';
+          val = Number.isFinite(n) ? `${Math.round(n * 10) / 10}${unit ? ' ' + unit : ''}` : st.state;
+        } else if (st && domain === 'climate' && st.attributes.current_temperature != null) {
+          val = `${st.attributes.current_temperature}°`;
+        } else if (st && domain === 'cover' && st.attributes.current_position != null) {
+          val = `${st.attributes.current_position} %`;
+        }
+        o.val.hidden = !val; o.val.textContent = val;
+        o.el.title = st ? `${name} : ${this._hass.formatEntityState ? this._hass.formatEntityState(st) : st.state}` : `${o.p.entity_id} (introuvable)`;
+      }
+    }
+
+    /* ---------- Commande (mode affichage) ---------- */
+
+    _moreInfo(entityId, force) {
       /* Sur Android, l'appui long déclenche aussi « contextmenu » : une seule ouverture. */
       const now = Date.now();
-      if (this._lastMoreInfo && this._lastMoreInfo.id === entityId && now - this._lastMoreInfo.t < 1000) return;
+      if (!force && this._lastMoreInfo && this._lastMoreInfo.id === entityId && now - this._lastMoreInfo.t < 1000) return;
       this._lastMoreInfo = { id: entityId, t: now };
       this.dispatchEvent(new CustomEvent('hass-more-info', { detail: { entityId }, bubbles: true, composed: true }));
     }
@@ -159,59 +357,291 @@
       if (o.busy) return;
       o.busy = st; o.el.classList.add('busy');
       const done = () => { o.busy = null; o.el.classList.remove('busy'); };
-      const guard = setTimeout(done, 5000);
+      o.guard = setTimeout(done, 5000);
       try {
         await this._hass.callService(domain, st.state === 'on' ? 'turn_off' : 'turn_on', { entity_id: id });
       } catch (err) {
-        clearTimeout(guard); done();
-        this.dispatchEvent(new CustomEvent('hass-notification', { detail: { message: `${st.attributes.friendly_name || id} : ${(err && err.message) || err}` }, bubbles: true, composed: true }));
-        return;
+        clearTimeout(o.guard); done();
+        this._toast(`${st.attributes.friendly_name || id} : ${(err && err.message) || err}`);
       }
-      o.guard = guard;
     }
 
-    /* Plus grande taille de l'image qui tient dans la zone, proportions gardées. */
-    _fit() {
-      const main = this.shadowRoot.getElementById('main');
-      const img = this.shadowRoot.getElementById('img');
+    /* ---------- Éditeur ---------- */
+
+    _enterEdit() {
+      if (!this._admin) return;
+      this._edit = true; this._sel = null; this._dirty = false;
+      this._draft = this._detail ? this._copy(this._detail) : null;
+      this._renderActions(); this._renderTabs(); this._renderTools();
+      if (this._draft) this._renderPlan();
+    }
+
+    _leaveEdit() {
+      this._edit = false; this._sel = null; this._dirty = false; this._draft = null;
+      this._renderActions(); this._renderTabs(); this._renderTools();
+      if (this._detail) this._renderPlan();
+    }
+
+    _cancelEdit() {
+      this._sel = null; this._dirty = false;
+      this._draft = this._detail ? this._copy(this._detail) : null;
+      this._renderActions(); this._renderTabs(); this._renderTools();
+      if (this._draft) this._renderPlan();
+    }
+
+    async _save() {
+      if (!this._dirty || !this._draft) return;
+      try {
+        await this._hass.callWS({
+          type: 'dimotic_plans/floorplans/save', plan_id: this._current,
+          positions: this._draft.positions.map((p) => ({ entity_id: p.entity_id, x: p.x, y: p.y })),
+          texts: this._draft.texts.map((t) => ({ id: t.id, text: t.text, x: t.x, y: t.y, size: t.size, color: t.color })),
+        });
+        this._toast('Plan enregistré');
+        await this._show(this._current);
+      } catch (err) { this._toast(`Enregistrement refusé : ${(err && err.message) || err}`); }
+    }
+
+    _select(sel) { this._sel = sel; this._markSelection(); this._renderTools(); }
+
+    _markSelection() {
+      const s = this._sel;
+      this._objs.forEach((o) => o.el.classList.toggle('sel', !!s && s.kind === 'obj' && s.index === o.index));
+      this._texts.forEach((o) => o.el.classList.toggle('sel', !!s && s.kind === 'txt' && s.index === o.index));
+    }
+
+    _item(o) { return o.kind === 'obj' ? this._draft.positions[o.index] : this._draft.texts[o.index]; }
+
+    _move(o, x, y) {
+      const it = this._item(o); it.x = clamp(x); it.y = clamp(y);
+      o.el.style.left = `${it.x * 100}%`; o.el.style.top = `${it.y * 100}%`;
+    }
+
+    /* Glisser-déposer (souris et tactile) avec magnétisme : le coin inférieur gauche se cale sur celui des autres éléments. */
+    _bindDrag(o) {
+      o.el.addEventListener('contextmenu', (e) => e.preventDefault());
+      o.el.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault(); e.stopPropagation();
+        const plan = this.shadowRoot.getElementById('plan');
+        const rect = plan.getBoundingClientRect();
+        const it = this._item(o);
+        const start = { cx: e.clientX, cy: e.clientY, x: it.x * rect.width, y: it.y * rect.height };
+        const others = [...this._objs, ...this._texts].filter((x) => x !== o).map((x) => this._item(x));
+        const gv = this.shadowRoot.getElementById('gv'), gh = this.shadowRoot.getElementById('gh');
+        let moved = false;
+        o.el.setPointerCapture(e.pointerId);
+        const move = (ev) => {
+          const dx = ev.clientX - start.cx, dy = ev.clientY - start.cy;
+          if (!moved && Math.hypot(dx, dy) < 4) return;
+          moved = true;
+          let px = start.x + dx, py = start.y + dy;
+          let snapX = null, snapY = null;
+          for (const other of others) {
+            const ox = other.x * rect.width, oy = other.y * rect.height;
+            if (Math.abs(ox - px) <= SNAP_PX && (snapX === null || Math.abs(ox - px) < Math.abs(snapX - px))) snapX = ox;
+            if (Math.abs(oy - py) <= SNAP_PX && (snapY === null || Math.abs(oy - py) < Math.abs(snapY - py))) snapY = oy;
+          }
+          if (snapX !== null) px = snapX;
+          if (snapY !== null) py = snapY;
+          gv.style.display = snapX !== null ? 'block' : 'none'; gv.style.left = `${px}px`;
+          gh.style.display = snapY !== null ? 'block' : 'none'; gh.style.top = `${py}px`;
+          this._move(o, px / rect.width, py / rect.height);
+        };
+        const up = () => {
+          o.el.removeEventListener('pointermove', move); o.el.removeEventListener('pointerup', up); o.el.removeEventListener('pointercancel', up);
+          gv.style.display = 'none'; gh.style.display = 'none';
+          this._select({ kind: o.kind, index: o.index });
+          if (moved) this._setDirty();
+        };
+        o.el.addEventListener('pointermove', move); o.el.addEventListener('pointerup', up); o.el.addEventListener('pointercancel', up);
+      });
+      if (o.kind === 'txt') o.el.addEventListener('dblclick', () => this._editText(o.index));
+    }
+
+    _key(e) {
+      if (!this._edit || !this._sel || this.shadowRoot.querySelector('.overlay')) return;
+      if (e.composedPath().some((n) => n && ['input', 'textarea', 'select'].includes(n.localName))) return;
       const plan = this.shadowRoot.getElementById('plan');
-      if (!img || !plan || !img.naturalWidth) return;
-      const w = main.clientWidth - 32, h = main.clientHeight - 48;
-      const r = Math.min(w / img.naturalWidth, h / img.naturalHeight);
-      plan.style.width = `${Math.max(1, Math.floor(img.naturalWidth * r))}px`;
-      plan.style.height = `${Math.max(1, Math.floor(img.naturalHeight * r))}px`;
+      if (!plan) return;
+      const step = e.shiftKey ? 10 : 1;
+      const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+      if (d) {
+        e.preventDefault();
+        const o = (this._sel.kind === 'obj' ? this._objs : this._texts)[this._sel.index];
+        const it = this._item(o);
+        this._move(o, it.x + d[0] / plan.clientWidth, it.y + d[1] / plan.clientHeight);
+        this._setDirty();
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault(); this._removeSelected();
+      } else if (e.key === 'Escape') {
+        this._select(null);
+      }
     }
 
-    _refresh() {
-      if (!this._hass || !this._objs.length) return;
-      for (const o of this._objs) {
-        const st = this._hass.states[o.p.entity_id];
-        if (o.busy && st !== o.busy) { clearTimeout(o.guard); o.busy = null; }
-        if (st === o.last && o.ico.firstChild) continue;
-        o.last = st;
-        const domain = o.p.entity_id.split('.')[0];
-        const name = st ? (st.attributes.friendly_name || o.p.entity_id) : o.p.entity_id;
-        o.el.className = 'obj' + (o.busy ? ' busy' : '') + (!st ? ' orphan' : st.state === 'unavailable' || st.state === 'unknown' ? ' unav' : ON_STATES.has(st.state) ? ' on' : '');
-        let icon = o.ico.firstChild;
-        if (st) {
-          if (!icon || icon.localName !== 'ha-state-icon') { o.ico.innerHTML = ''; icon = document.createElement('ha-state-icon'); o.ico.appendChild(icon); }
-          icon.hass = this._hass; icon.stateObj = st;
-        } else if (!icon || icon.localName !== 'ha-icon') {
-          o.ico.innerHTML = '<ha-icon icon="mdi:help-circle-outline"></ha-icon>';
+    _removeSelected() {
+      const s = this._sel; if (!s) return;
+      (s.kind === 'obj' ? this._draft.positions : this._draft.texts).splice(s.index, 1);
+      this._sel = null; this._renderPlan(); this._setDirty();
+    }
+
+    /* ---------- Boîtes de dialogue ---------- */
+
+    /* `body` : HTML du formulaire ; `check(form)` renvoie un message d'erreur ou rien ; résout avec le formulaire ou null. */
+    _dialog({ title, body, ok = 'OK', danger = false, check }) {
+      return new Promise((resolve) => {
+        const ov = document.createElement('div');
+        ov.className = 'overlay';
+        ov.innerHTML = `<form class="dialog"><h2>${esc(title)}</h2>${body}<div class="err"></div>
+          <div class="btns"><button type="button" class="cancel">Annuler</button><button type="submit" class="ok${danger ? ' danger' : ''}">${esc(ok)}</button></div></form>`;
+        const form = ov.querySelector('form');
+        const close = (v) => { ov.remove(); resolve(v); };
+        ov.addEventListener('pointerdown', (e) => { if (e.target === ov) close(null); });
+        ov.querySelector('.cancel').addEventListener('click', () => close(null));
+        form.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(null); });
+        form.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const msg = check && check(form);
+          if (msg) { form.querySelector('.err').textContent = msg; return; }
+          close(form);
+        });
+        this.shadowRoot.appendChild(ov);
+        const first = form.querySelector('input, select');
+        if (first) first.focus();
+      });
+    }
+
+    _addObject() {
+      const used = new Set(this._draft.positions.map((p) => p.entity_id));
+      const all = Object.values(this._hass.states)
+        .filter((s) => !used.has(s.entity_id))
+        .map((s) => ({ id: s.entity_id, name: s.attributes.friendly_name || s.entity_id }))
+        .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+      const ov = document.createElement('div');
+      ov.className = 'overlay';
+      ov.innerHTML = `<div class="dialog"><h2>Ajouter un objet</h2>
+        <input type="search" id="q" placeholder="Rechercher (nom ou entity_id)…" autocomplete="off">
+        <div class="pick" id="list"></div>
+        <div class="btns"><button type="button" class="cancel">Annuler</button></div></div>`;
+      const close = () => ov.remove();
+      ov.addEventListener('pointerdown', (e) => { if (e.target === ov) close(); });
+      ov.querySelector('.cancel').addEventListener('click', close);
+      const list = ov.querySelector('#list'), q = ov.querySelector('#q');
+      const render = () => {
+        const words = q.value.toLowerCase().split(/\s+/).filter(Boolean);
+        const found = all.filter((e) => words.every((w) => e.name.toLowerCase().includes(w) || e.id.includes(w))).slice(0, 80);
+        list.innerHTML = found.length ? '' : '<div class="muted">Aucune entité</div>';
+        for (const e of found) {
+          const row = document.createElement('div');
+          const icon = document.createElement('ha-state-icon');
+          icon.hass = this._hass; icon.stateObj = this._hass.states[e.id];
+          const label = document.createElement('span');
+          label.innerHTML = `${esc(e.name)}<small>${esc(e.id)}</small>`;
+          row.append(icon, label);
+          row.addEventListener('click', () => {
+            close();
+            this._draft.positions.push({ entity_id: e.id, stored_entity_id: e.id, orphan: false, x: 0.5, y: 0.5 });
+            this._sel = { kind: 'obj', index: this._draft.positions.length - 1 };
+            this._renderPlan(); this._setDirty();
+            this._toast('Objet ajouté au milieu du plan : fais-le glisser à sa place');
+          });
+          list.appendChild(row);
         }
-        let val = '';
-        if (st && VALUE_DOMAINS.has(domain) && st.state !== 'unavailable' && st.state !== 'unknown') {
-          const n = Number(st.state);
-          const unit = st.attributes.unit_of_measurement || '';
-          val = Number.isFinite(n) ? `${Math.round(n * 10) / 10}${unit ? ' ' + unit : ''}` : st.state;
-        } else if (st && domain === 'climate' && st.attributes.current_temperature != null) {
-          val = `${st.attributes.current_temperature}°`;
-        } else if (st && domain === 'cover' && st.attributes.current_position != null) {
-          val = `${st.attributes.current_position} %`;
-        }
-        o.val.hidden = !val; o.val.textContent = val;
-        o.el.title = st ? `${name} : ${this._hass.formatEntityState ? this._hass.formatEntityState(st) : st.state}` : `${o.p.entity_id} (introuvable)`;
+      };
+      q.addEventListener('input', render);
+      q.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+      this.shadowRoot.appendChild(ov);
+      render(); q.focus();
+    }
+
+    async _editText(index) {
+      const t = index == null ? { text: '', size: 'medium', color: '#212121' } : this._draft.texts[index];
+      const sizes = { small: 'Petit', medium: 'Moyen', large: 'Grand' };
+      const form = await this._dialog({
+        title: index == null ? 'Ajouter un texte' : 'Modifier le texte',
+        ok: index == null ? 'Ajouter' : 'Appliquer',
+        body: `<label>Texte<input type="text" name="text" maxlength="200" value="${esc(t.text)}"></label>
+          <div class="row"><label>Taille<select name="size">${Object.entries(sizes).map(([k, v]) => `<option value="${k}" ${k === t.size ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+          <label>Couleur<input type="color" name="color" value="${/^#[0-9a-f]{6}$/i.test(t.color) ? t.color : '#212121'}"></label></div>`,
+        check: (f) => (f.elements.text.value.trim() ? '' : 'Le texte est vide.'),
+      });
+      if (!form) return;
+      const values = { text: form.elements.text.value.trim(), size: form.elements.size.value, color: form.elements.color.value };
+      if (index == null) {
+        this._draft.texts.push({ id: `t${Date.now().toString(36)}`, x: 0.5, y: 0.5, ...values });
+        this._sel = { kind: 'txt', index: this._draft.texts.length - 1 };
+      } else {
+        Object.assign(this._draft.texts[index], values);
       }
+      this._renderPlan(); this._setDirty();
+    }
+
+    async _readImage(form) {
+      const file = form.elements.image && form.elements.image.files[0];
+      if (!file) return null;
+      return { name: file.name, data: await fileToBase64(file) };
+    }
+
+    _checkImage(form, required) {
+      const file = form.elements.image && form.elements.image.files[0];
+      if (!file) return required ? 'Choisis une image.' : '';
+      if (!/\.(png|jpe?g|webp|svg)$/i.test(file.name)) return 'Formats acceptés : png, jpg, webp, svg.';
+      if (file.size > MAX_UPLOAD) return 'Image trop volumineuse (3 Mo au plus).';
+      return '';
+    }
+
+    async _planCall(msg, okText, nextId) {
+      try {
+        const res = await this._hass.callWS(msg);
+        this._toast(okText);
+        await this._loadList(nextId === undefined ? (res && res.plan_id) || this._current : nextId);
+      } catch (err) { this._toast(`Refusé : ${(err && err.message) || err}`); }
+    }
+
+    async _newPlan() {
+      const form = await this._dialog({
+        title: 'Nouveau plan', ok: 'Créer',
+        body: `<label>Nom<input type="text" name="name" maxlength="64"></label>
+          <label>Image (png, jpg, webp, svg — vide : page blanche)<input type="file" name="image" accept=".png,.jpg,.jpeg,.webp,.svg"></label>`,
+        check: (f) => (!f.elements.name.value.trim() ? 'Donne un nom au plan.'
+          : this._plans.some((p) => p.id === f.elements.name.value.trim()) ? 'Un plan porte déjà ce nom.' : this._checkImage(f, false)),
+      });
+      if (!form) return;
+      const msg = { type: 'dimotic_plans/floorplans/create', plan_id: form.elements.name.value.trim() };
+      const image = await this._readImage(form);
+      if (image) msg.image = image;
+      await this._planCall(msg, 'Plan créé');
+    }
+
+    async _renamePlan() {
+      const form = await this._dialog({
+        title: 'Renommer le plan', ok: 'Renommer',
+        body: `<label>Nouveau nom<input type="text" name="name" maxlength="64" value="${esc(this._current)}"></label>`,
+        check: (f) => { const v = f.elements.name.value.trim(); return !v ? 'Le nom est vide.' : v !== this._current && this._plans.some((p) => p.id === v) ? 'Un plan porte déjà ce nom.' : ''; },
+      });
+      if (!form || form.elements.name.value.trim() === this._current) return;
+      await this._planCall({ type: 'dimotic_plans/floorplans/rename', plan_id: this._current, new_id: form.elements.name.value.trim() }, 'Plan renommé');
+    }
+
+    async _changeImage() {
+      const form = await this._dialog({
+        title: 'Changer l\'image du plan', ok: 'Remplacer',
+        body: `<p class="muted" style="margin:0">Les objets et les textes gardent leur position relative (en % de l'image).</p>
+          <label>Image (png, jpg, webp, svg)<input type="file" name="image" accept=".png,.jpg,.jpeg,.webp,.svg"></label>`,
+        check: (f) => this._checkImage(f, true),
+      });
+      if (!form) return;
+      await this._planCall({ type: 'dimotic_plans/floorplans/set_image', plan_id: this._current, image: await this._readImage(form) }, 'Image remplacée', this._current);
+    }
+
+    async _deletePlan() {
+      const n = this._draft ? this._draft.positions.length : 0;
+      const form = await this._dialog({
+        title: 'Supprimer le plan', ok: 'Supprimer', danger: true,
+        body: `<p style="margin:0">Supprimer « <b>${esc(this._current)}</b> », son image et ses ${n} objet(s) ? Les entités de HA ne sont pas touchées.</p>`,
+      });
+      if (!form) return;
+      await this._planCall({ type: 'dimotic_plans/floorplans/delete', plan_id: this._current }, 'Plan supprimé', null);
     }
   }
   if (!customElements.get('dimotic-plans-panel')) customElements.define('dimotic-plans-panel', PlansPanel);
