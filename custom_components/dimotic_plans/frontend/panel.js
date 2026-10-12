@@ -1,4 +1,4 @@
-/* Plans — panneau personnalisé (Dimotic-HA Plans). v0.1.3
+/* Plans — panneau personnalisé (Dimotic-HA Plans). v0.1.4
  * Affichage : un onglet par plan, objets placés sur l'image (icône seule, colorée selon l'état ; valeur des capteurs à
  * droite de l'icône ; mise à jour en direct). Point d'ancrage d'un objet = coin inférieur gauche de son icône ; d'un
  * texte = coin inférieur gauche du texte (alignements faciles).
@@ -64,7 +64,9 @@
     .dialog label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
     .dialog input[type=text], .dialog input[type=search], .dialog select { font: inherit; padding: 8px; border-radius: 6px; border: 1px solid var(--divider-color, #ccc);
               background: var(--primary-background-color, #fff); color: inherit; }
-    .dialog .row { display: flex; gap: 12px; } .dialog .row > * { flex: 1; }
+    .dialog .row { display: flex; gap: 12px; } .dialog .row > * { flex: 1 1 0; min-width: 0; }
+    .dialog input[type=text], .dialog input[type=search], .dialog select { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; text-overflow: ellipsis; }
+    .dialog label.check { flex-direction: row; align-items: flex-start; gap: 6px; }
     .dialog .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
     .dialog .btns button { font: inherit; border: none; border-radius: 6px; padding: 8px 14px; cursor: pointer; background: transparent; color: var(--primary-color, #03a9f4); }
     .dialog .btns button.ok { background: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff); }
@@ -578,7 +580,7 @@
         <div class="row"><label>QUOI<select id="fquoi">${opts(count('quoi'), 'Tous')}</select></label>
           <label>Lieu<select id="flieu">${opts(count('lieu'), 'Tous')}</select></label></div>
         <input type="search" id="q" placeholder="Rechercher (QUOI, lieu, nom)…" autocomplete="off">
-        <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="sec">Toutes les entités (sans taxonomie, boutons, diagnostic, configuration, masquées)</label>
+        <label class="check"><input type="checkbox" id="sec">Toutes les entités (sans taxonomie, boutons, diagnostic, configuration, masquées)</label>
         <div class="pick" id="list"></div>
         <div class="btns"><button type="button" class="cancel">Annuler</button></div></div>`;
       const close = () => ov.remove();
