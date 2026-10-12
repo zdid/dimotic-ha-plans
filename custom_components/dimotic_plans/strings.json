@@ -1,0 +1,29 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Plans de la maison",
+        "description": "Un panneau « Plans » dans le menu de HA. Choisissez le titre et l'icône du menu (modifiables ensuite avec « Configurer ».",
+        "data": {
+          "title": "Titre du menu",
+          "icon": "Icône du menu"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Les plans sont déjà configurés."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Entrée du menu",
+        "description": "Titre et icône affichés dans le menu de gauche de Home Assistant.",
+        "data": {
+          "title": "Titre",
+          "icon": "Icône"
+        }
+      }
+    }
+  }
+}
