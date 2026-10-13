@@ -46,7 +46,7 @@
     .obj.busy .ico { animation: busy 0.8s ease-in-out infinite; }
     @keyframes busy { 50% { transform: scale(0.8); opacity: 0.5; } }
     .obj ha-state-icon, .obj ha-icon { --mdc-icon-size: 26px; }
-    .obj .val { padding: 0 4px; border-radius: 6px; background: rgba(255,255,255,.85); color: #212121; font-size: 12px; font-weight: 500; white-space: nowrap; }
+    .obj .val { padding: 0 4px; border-radius: 6px; background: rgba(255,255,255,.85); color: #212121; font-size: 12px; font-weight: 500; white-space: pre; }
     .txt { position: absolute; transform: translateY(-100%); line-height: 1.1; white-space: nowrap; pointer-events: none; font-weight: 500; user-select: none; }
     .edit .obj, .edit .txt { cursor: move; pointer-events: auto; touch-action: none; }
     .edit .obj.sel .ico, .edit .txt.sel { outline: 2px solid var(--primary-color, #03a9f4); outline-offset: 1px; border-radius: 4px; }
@@ -102,7 +102,25 @@
     power: '#f9a825', apparent_power: '#f9a825', energy: '#fb8c00', current: '#fdd835', voltage: '#7cb342',
     battery: '#43a047', illuminance: '#fbc02d', carbon_dioxide: '#8d6e63', pm25: '#8d6e63', signal_strength: '#90a4ae',
   };
+  /* Sous-types de switch que HA ne distingue pas (portage de SwitchTypeDetector de HAPLAN) : par mots-clés de l'entity_id,
+     sinon de la taxonomie `attributs_taxonomie.quoi`. Icône + couleurs [allumé, éteint]. */
+  const SWITCH_KINDS = [
+    [/ventilation|vmc|fan/, 'mdi:fan', '#FFEB3B', '#90a4ae'],
+    [/water_heater|chauffe_eau|ballon/, 'mdi:water-boiler', '#FF9800', '#2196F3'],
+    [/radiateur|radiator|heating|chauffage/, 'mdi:radiator', '#F44336', '#2196F3'],
+  ];
+  const switchKind = (st, domain) => {
+    if (domain !== 'switch' || !st) return null;
+    const quoi = ((st.attributes.attributs_taxonomie || {}).quoi || '').toLowerCase();
+    for (const text of [st.entity_id.toLowerCase(), quoi]) {
+      const k = SWITCH_KINDS.find((x) => x[0].test(text));
+      if (k) return { icon: k[1], on: k[2], off: k[3] };
+    }
+    return null;
+  };
   const colorFor = (st, domain) => {
+    const kind = switchKind(st, domain);
+    if (kind) return ON_STATES.has(st.state) ? kind.on : kind.off;
     if (domain === 'sensor' || domain === 'number' || domain === 'input_number') return SENSOR_COLORS[st.attributes.device_class] || '#00897b';
     const c = COLORS[domain];
     if (!c) return '#00897b';
@@ -361,7 +379,8 @@
         let icon = o.ico.firstChild;
         if (st) {
           if (!icon || icon.localName !== 'ha-state-icon') { o.ico.innerHTML = ''; icon = document.createElement('ha-state-icon'); o.ico.appendChild(icon); }
-          icon.hass = this._hass; icon.stateObj = st;
+          icon.hass = this._hass; const kind = switchKind(st, domain);
+          icon.stateObj = kind && !st.attributes.icon ? { ...st, attributes: { ...st.attributes, icon: kind.icon } } : st;
         } else if (!icon || icon.localName !== 'ha-icon') {
           o.ico.innerHTML = '<ha-icon icon="mdi:help-circle-outline"></ha-icon>';
         }
@@ -370,8 +389,10 @@
           const n = Number(st.state);
           const unit = st.attributes.unit_of_measurement || '';
           val = Number.isFinite(n) ? `${Math.round(n * 10) / 10}${unit ? ' ' + unit : ''}` : st.state;
-        } else if (st && domain === 'climate' && st.attributes.current_temperature != null) {
-          val = `${st.attributes.current_temperature}°`;
+        } else if (st && domain === 'climate') {
+          /* comme HAPLAN : consigne puis « act: » (température actuelle) sur une seconde ligne */
+          const cons = st.attributes.temperature, act = st.attributes.current_temperature;
+          val = `${cons != null ? cons + '°C' : '—'}\nact: ${act != null ? act + '°C' : 'N/A'}`;
         } else if (st && domain === 'cover' && st.attributes.current_position != null) {
           val = `${st.attributes.current_position} %`;
         }
