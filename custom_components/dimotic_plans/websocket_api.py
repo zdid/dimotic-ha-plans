@@ -8,13 +8,16 @@ import voluptuous as vol
 
 from homeassistant.components import websocket_api
 import base64
+import json
+import re
 from pathlib import Path
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 
-from .const import DOMAIN, IMAGES_DIR, MAX_IMAGE_BYTES
+from .const import CONF_SITE, DOMAIN, IMAGES_DIR, MAX_IMAGE_BYTES
 from .editor import EditError, blank_svg, clean_plan_id, clean_positions, clean_texts, image_extension, new_image_name
+from .exporter import export_plans
 from .importer import ImportError_, normalize, valid_image_name
 
 
@@ -27,6 +30,8 @@ def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_list)
     websocket_api.async_register_command(hass, ws_import)
     websocket_api.async_register_command(hass, ws_get)
+    websocket_api.async_register_command(hass, ws_export)
+    websocket_api.async_register_command(hass, ws_generate)
     for handler in (ws_save, ws_create, ws_rename, ws_delete, ws_set_image):
         websocket_api.async_register_command(hass, handler)
 
@@ -137,6 +142,64 @@ async def ws_get(hass: HomeAssistant, connection: websocket_api.ActiveConnection
         "positions": resolve_positions(plan.get("positions", []), registry.async_get),
         "texts": plan.get("texts", []),
     })
+
+
+@websocket_api.websocket_command({vol.Required("type"): "dimotic_plans/floorplans/export", vol.Optional("plan_ids"): [str]})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_export(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Plans (positions avec `entity_id` actuel et « quoi », textes) et leurs images en base64 — pour l'assembleur d'écrans ESP."""
+    store = _store(hass)
+    if store is None:
+        connection.send_error(msg["id"], "not_configured", "Intégration Plans non configurée.")
+        return
+    registry = er.async_get(hass)
+    images_dir = Path(hass.config.path(IMAGES_DIR))
+
+    def quoi_of(entity_id: str) -> str | None:
+        state = hass.states.get(entity_id)
+        tax = state.attributes.get("attributs_taxonomie") if state is not None else None
+        return tax.get("quoi") if isinstance(tax, dict) else None
+
+    def read_image(name: str) -> bytes | None:
+        if not valid_image_name(name):
+            return None
+        path = images_dir / name
+        return path.read_bytes() if path.is_file() else None
+
+    try:
+        result = await hass.async_add_executor_job(export_plans, store.floorplans, msg.get("plan_ids"), registry.async_get, quoi_of, read_image)
+    except (KeyError, FileNotFoundError) as err:
+        connection.send_error(msg["id"], "not_found", str(err.args[0] if err.args else err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command({vol.Required("type"): "dimotic_plans/generate", vol.Required("device"): str, vol.Optional("action", default="firmware"): vol.In(["firmware", "amorce"])})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_generate(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Bouton « Générer » : demande à l'assembleur d'écrans ESP (application esps-assemble de dimotic-ha) d'assembler l'appareil et de le faire fabriquer.
+
+    Publie `{device, action}` (non conservé) sur `dimotic/esps-assemble/<site>/generer` par le MQTT de HA ; le site est réglé dans les options.
+    """
+    site = ""
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        site = str(entry.options.get(CONF_SITE, "")).strip()
+    if not site:
+        connection.send_error(msg["id"], "no_site", "Site non renseigné : Paramètres → Appareils et services → Plans → Configurer.")
+        return
+    device = msg["device"].strip()
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", device):
+        connection.send_error(msg["id"], "invalid", "Nom d'appareil invalide.")
+        return
+    try:
+        from homeassistant.components import mqtt
+        await mqtt.async_publish(hass, f"dimotic/esps-assemble/{site}/generer", json.dumps({"appareil": device, "action": msg["action"]}), 1, False)
+    except Exception as err:  # MQTT absent ou déconnecté : message lisible côté panneau
+        connection.send_error(msg["id"], "mqtt_unavailable", f"Publication MQTT impossible : {err}")
+        return
+    connection.send_result(msg["id"], {"site": site, "device": device, "action": msg["action"]})
 
 
 # --- Éditeur (administrateurs) ---------------------------------------------------------------------------------------

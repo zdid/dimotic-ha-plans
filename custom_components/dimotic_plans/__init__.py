@@ -14,6 +14,7 @@ from . import websocket_api as plans_ws
 from .http import PlanImageView
 from .const import (
     CONF_ICON,
+    CONF_SITE,
     CONF_TITLE,
     DEFAULT_ICON,
     DEFAULT_TITLE,
@@ -25,7 +26,7 @@ from .const import (
 from .storage import PlanStore
 
 _LOGGER = logging.getLogger(__name__)
-VERSION = "0.1.6"
+VERSION = "0.1.8"
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -52,7 +53,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         sidebar_title=title,
         sidebar_icon=icon,
         require_admin=False,  # affichage pour tous ; import (et futur éditeur) réservés aux administrateurs
-        config={"title": title},
+        config={"title": title, "site": entry.options.get(CONF_SITE, "")},
     )
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     return True

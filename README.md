@@ -43,3 +43,14 @@ dans le dépôt dimotic-ha.
 ## Développement
 
 `python3 -m pytest tests` (fonctions pures). Licence MIT.
+
+## Écrans ESP (depuis v0.1.8)
+
+Avec l'application `esps-assemble` de dimotic-ha (assembleur de sources ESPHome) :
+
+- **Export** : la commande WebSocket `dimotic_plans/floorplans/export` (administrateurs) renvoie les plans (positions avec l'`entity_id` **actuel**
+  et le « quoi » de la taxonomie, textes) et leurs images en base64 ; l'assembleur s'en sert pour fabriquer les pages de plans des écrans.
+- **Bouton « Générer »** : renseigner le **site** dans *Paramètres → Appareils et services → Plans → Configurer* (ex. `stfort`, `noisy`) ; le panneau
+  affiche alors, pour les administrateurs, la liste « Écrans ESP » (appareils de l'assembleur qui ont des pages de plans, avec leur état) et un bouton
+  **Générer** par appareil. Il publie la demande `dimotic/esps-assemble/<site>/generer` par le MQTT de HA ; l'assembleur assemble, l'usine compile, le
+  poseur envoie à l'écran.

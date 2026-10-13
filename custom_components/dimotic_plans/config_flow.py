@@ -10,14 +10,15 @@ from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResu
 from homeassistant.core import callback
 from homeassistant.helpers import selector
 
-from .const import CONF_ICON, CONF_TITLE, DEFAULT_ICON, DEFAULT_TITLE, DOMAIN
+from .const import CONF_ICON, CONF_SITE, CONF_TITLE, DEFAULT_ICON, DEFAULT_SITE, DEFAULT_TITLE, DOMAIN
 
 
-def _schema(title: str, icon: str) -> vol.Schema:
+def _schema(title: str, icon: str, site: str = DEFAULT_SITE) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required(CONF_TITLE, default=title): str,
             vol.Required(CONF_ICON, default=icon): selector.IconSelector(),
+            vol.Optional(CONF_SITE, default=site): str,
         }
     )
 
@@ -26,6 +27,7 @@ def _clean(user_input: dict[str, Any]) -> dict[str, str]:
     return {
         CONF_TITLE: (user_input.get(CONF_TITLE) or "").strip() or DEFAULT_TITLE,
         CONF_ICON: (user_input.get(CONF_ICON) or "").strip() or DEFAULT_ICON,
+        CONF_SITE: (user_input.get(CONF_SITE) or "").strip(),
     }
 
 
@@ -54,4 +56,4 @@ class DimoticPlansOptionsFlow(OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=_clean(user_input))
         opts = self.config_entry.options
-        return self.async_show_form(step_id="init", data_schema=_schema(opts.get(CONF_TITLE, DEFAULT_TITLE), opts.get(CONF_ICON, DEFAULT_ICON)))
+        return self.async_show_form(step_id="init", data_schema=_schema(opts.get(CONF_TITLE, DEFAULT_TITLE), opts.get(CONF_ICON, DEFAULT_ICON), opts.get(CONF_SITE, DEFAULT_SITE)))

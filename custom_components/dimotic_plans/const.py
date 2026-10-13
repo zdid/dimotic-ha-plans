@@ -6,6 +6,8 @@ CONF_TITLE = "title"
 CONF_ICON = "icon"
 DEFAULT_TITLE = "Plans"
 DEFAULT_ICON = "mdi:floor-plan"
+CONF_SITE = "site"          # site de cette maison (sujets MQTT de l'assembleur d'écrans ESP) ; vide = fonction « Écrans » inactive
+DEFAULT_SITE = ""
 
 PANEL_URL_PATH = "plans"
 PANEL_COMPONENT = "dimotic-plans-panel"

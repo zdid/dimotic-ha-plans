@@ -28,6 +28,8 @@
     .tools button[disabled] { opacity: .45; cursor: default; }
     .tools .sep { width: 1px; align-self: stretch; background: var(--divider-color, #ccc); margin: 0 4px; }
     .tools ha-icon { --mdc-icon-size: 18px; }
+    .ecrans { padding: 4px 16px; } .ecrans details { background: var(--card-background-color, #fff); border-radius: 8px; padding: 6px 12px; }
+    .ecrans summary { cursor: pointer; font-weight: 500; } .ecran { display: flex; align-items: center; gap: 10px; padding: 6px 0; flex-wrap: wrap; }
     .tools .hint { font-size: 13px; color: var(--secondary-text-color, #727272); }
     main { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px 16px; display: flex; flex-direction: column; align-items: center; }
     .card { background: var(--card-background-color, #fff); border-radius: 12px; padding: 16px; box-shadow: var(--ha-card-box-shadow, 0 1px 3px rgba(0,0,0,.2)); }
@@ -155,13 +157,18 @@
       if (!this._built) this._build();
       if (this._menu) this._menu.hass = hass;
       if (first) this._renderActions();
+      this._startEcrans();
       this._refresh();
     }
     set narrow(value) { this._narrow = value; if (this._menu) this._menu.narrow = value; }
-    set panel(p) { this._title = (p && p.config && p.config.title) || 'Plans'; if (this._titleEl) this._titleEl.textContent = this._title; }
+    set panel(p) { this._title = (p && p.config && p.config.title) || 'Plans'; this._site = (p && p.config && p.config.site) || ''; if (this._titleEl) this._titleEl.textContent = this._title; }
     set route(_r) {}
     connectedCallback() { const m = this.shadowRoot.getElementById('main'); if (m) this._ro.observe(m); window.addEventListener('keydown', this._onKey); }
-    disconnectedCallback() { this._ro.disconnect(); window.removeEventListener('keydown', this._onKey); }
+    disconnectedCallback() {
+      this._ro.disconnect(); window.removeEventListener('keydown', this._onKey);
+      (this._unsubs || []).forEach((u) => { try { u(); } catch (_e) { /* déjà fermé */ } });
+      this._unsubs = []; this._ecransStarted = false;
+    }
     get _admin() { return !!(this._hass && this._hass.user && this._hass.user.is_admin); }
 
     _build() {
@@ -169,12 +176,46 @@
       this.shadowRoot.innerHTML = `<style>${STYLE}</style>
         <div class="top"><ha-menu-button></ha-menu-button><span class="title" id="title">${esc(this._title)}</span><span id="actions"></span></div>
         <div class="tabs" id="tabs"></div>
+        <div class="ecrans" id="ecrans" hidden></div>
         <div class="tools" id="tools" hidden></div>
         <main id="main"><div class="card muted">Chargement des plans…</div></main>`;
       this._menu = this.shadowRoot.querySelector('ha-menu-button'); this._menu.hass = this._hass; this._menu.narrow = this._narrow;
       this._titleEl = this.shadowRoot.getElementById('title');
       this._ro.observe(this.shadowRoot.getElementById('main'));
       this._loadList();
+    }
+
+    /* ---------- Écrans ESP : bouton « Générer » (assembleur dimotic-ha) ---------- */
+
+    async _startEcrans() {
+      if (this._ecransStarted || !this._hass || !this._built || !this._site || !this._admin) return;
+      this._ecransStarted = true; this._appareils = []; this._etats = {}; this._unsubs = this._unsubs || [];
+      const sub = async (topic, cb) => {
+        try { this._unsubs.push(await this._hass.connection.subscribeMessage(cb, { type: 'mqtt/subscribe', topic })); }
+        catch (_e) { this._ecransErr = 'MQTT de HA indisponible'; this._drawEcrans(); }
+      };
+      await sub(`dimotic/esps-assemble/${this._site}/appareils`, (m) => { try { this._appareils = JSON.parse(m.payload).appareils || []; } catch (_e) { /* message illisible */ } this._drawEcrans(); });
+      await sub(`dimotic/esphome/${this._site}/status/+`, (m) => { const nom = String(m.topic).split('/').pop(); try { this._etats[nom] = m.payload ? JSON.parse(m.payload) : null; } catch (_e) { /* message illisible */ } this._drawEcrans(); });
+    }
+
+    _drawEcrans() {
+      const box = this.shadowRoot.getElementById('ecrans');
+      if (!box) return;
+      const liste = (this._appareils || []).filter((a) => a.pagesDePlans);
+      box.hidden = !liste.length && !this._ecransErr;
+      if (box.hidden) return;
+      const ETATS = { en_attente: 'en attente', recuperation: 'récupération', reconnaissance: 'reconnaissance', compilation: 'compilation…', pret_a_poser: 'firmware prêt', envoi: 'envoi à l\'écran', verification: 'vérification', termine: 'terminé', echec: 'échec' };
+      box.innerHTML = `<details><summary>Écrans ESP (${liste.length})</summary>${this._ecransErr ? `<p class="muted">${esc(this._ecransErr)}</p>` : ''}${liste.map((a) => {
+        const st = this._etats[a.nom];
+        return `<div class="ecran"><b>${esc(a.nomAffichage || a.nom)}</b> <span class="muted">${st ? esc(ETATS[st.etat] || st.etat) + (st.detail ? ' — ' + esc(String(st.detail).slice(-80)) : '') : 'aucun état'}</span>
+          <button data-gen="${esc(a.nom)}"><ha-icon icon="mdi:cog-play" style="--mdc-icon-size:18px"></ha-icon>Générer</button></div>`;
+      }).join('')}</details>`;
+      box.querySelectorAll('button[data-gen]').forEach((b) => b.addEventListener('click', async () => {
+        b.disabled = true;
+        try { await this._hass.callWS({ type: 'dimotic_plans/generate', device: b.dataset.gen }); this._toast('Génération demandée : ' + b.dataset.gen); }
+        catch (err) { this._toast((err && err.message) || 'Échec de la demande'); }
+        b.disabled = false;
+      }));
     }
 
     _error(err) {
