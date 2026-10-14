@@ -12,15 +12,15 @@
     :host { display: flex; flex-direction: column; height: 100vh; height: 100dvh; background: var(--primary-background-color, #fafafa);
             color: var(--primary-text-color, #212121); overflow: hidden; font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif); }
     .top { flex: none; display: flex; align-items: center; gap: 8px; padding: 0 8px; min-height: 56px; background: var(--app-header-background-color, #03a9f4); color: var(--app-header-text-color, #fff); }
-    .title { font-size: 20px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .title { font-size: 20px; flex: 0 1 auto; max-width: 30%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .top button { display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,.6); background: transparent; color: inherit;
                   border-radius: 18px; padding: 6px 12px; font: inherit; cursor: pointer; }
     .top button.main { background: #fff; color: var(--primary-color, #03a9f4); border-color: #fff; font-weight: 500; }
     .top button[disabled] { opacity: .5; cursor: default; }
-    .tabs { flex: none; display: flex; gap: 8px; padding: 8px 16px 0; overflow-x: auto; }
-    .tab { border: 1px solid var(--divider-color, #ccc); background: var(--card-background-color, #fff); color: inherit; border-radius: 16px; padding: 6px 14px; cursor: pointer; white-space: nowrap; font: inherit; }
-    .tab.on { background: var(--primary-color, #03a9f4); border-color: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff); }
-    .tab[disabled]:not(.on) { opacity: .5; cursor: default; }
+    .tabs { flex: 1 1 0; min-width: 0; display: flex; gap: 6px; padding: 0; }
+    .plansel { max-width: 100%; font: inherit; font-size: 15px; padding: 5px 8px; border-radius: 16px; border: 1px solid rgba(255,255,255,.6); background: rgba(255,255,255,.15); color: inherit; }
+    .plansel option { color: #212121; background: #fff; }
+    .plansel[disabled] { opacity: .6; }
     .tools { flex: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 16px 0; align-items: center; }
     .tools button { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--divider-color, #ccc); background: var(--card-background-color, #fff);
                     color: inherit; border-radius: 8px; padding: 5px 10px; font: inherit; font-size: 14px; cursor: pointer; }
@@ -28,8 +28,21 @@
     .tools button[disabled] { opacity: .45; cursor: default; }
     .tools .sep { width: 1px; align-self: stretch; background: var(--divider-color, #ccc); margin: 0 4px; }
     .tools ha-icon { --mdc-icon-size: 18px; }
-    .ecrans { padding: 4px 16px; } .ecrans details { background: var(--card-background-color, #fff); border-radius: 8px; padding: 6px 12px; }
-    .ecrans summary { cursor: pointer; font-weight: 500; } .ecran { display: flex; align-items: center; gap: 10px; padding: 6px 0; flex-wrap: wrap; }
+    .ecrans { position: relative; flex: none; }
+    .ecrans .pop { position: absolute; right: 0; top: calc(100% + 8px); z-index: 30; min-width: min(340px, 86vw); max-width: 90vw; background: var(--card-background-color, #fff); color: var(--primary-text-color, #212121);
+                   border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.35); padding: 8px 14px; }
+    .ecrans .pop[hidden] { display: none; }
+    .ecrans .pop select { width: 100%; font: inherit; padding: 6px; border-radius: 8px; border: 1px solid var(--divider-color, #ccc); background: var(--primary-background-color, #fff); color: inherit; }
+    .ecranetat { font-size: 13px; margin: 8px 0; word-break: break-word; }
+    .ecrans .pop button { border: 1px solid var(--divider-color, #ccc); background: transparent; color: var(--primary-color, #03a9f4); border-radius: 8px; padding: 4px 10px; font: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+    @media (max-width: 600px) { .title { display: none; } }
+    /* Thème sombre : l'image est inversée (teintes conservées), les icônes et valeurs suivent. */
+    .plan.dark { background: #1b1b1b; }
+    .plan.dark img { filter: invert(1) hue-rotate(180deg); }
+    .plan.dark .obj .ico { filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000); }
+    .plan.dark .obj.on .ico { filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 4px var(--obj-color, #ffb300)); }
+    .plan.dark .obj .val { background: rgba(32,32,32,.88); color: #eee; }
+    .top button.theme { padding: 4px 8px; }
     .tools .hint { font-size: 13px; color: var(--secondary-text-color, #727272); }
     main { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px 16px; display: flex; flex-direction: column; align-items: center; }
     .card { background: var(--card-background-color, #fff); border-radius: 12px; padding: 16px; box-shadow: var(--ha-card-box-shadow, 0 1px 3px rgba(0,0,0,.2)); }
@@ -153,11 +166,12 @@
       this._onKey = (e) => this._key(e);
     }
     set hass(hass) {
-      const first = !this._hass; this._hass = hass;
+      const first = !this._hass; const wasDark = this._built ? this._dark : null; this._hass = hass;
       if (!this._built) this._build();
       if (this._menu) this._menu.hass = hass;
       if (first) this._renderActions();
       this._startEcrans();
+      if (wasDark !== null && wasDark !== this._dark) this._applyTheme();
       this._refresh();
     }
     set narrow(value) { this._narrow = value; if (this._menu) this._menu.narrow = value; }
@@ -169,19 +183,27 @@
       (this._unsubs || []).forEach((u) => { try { u(); } catch (_e) { /* déjà fermé */ } });
       this._unsubs = []; this._ecransStarted = false;
     }
+    /* Thème du plan : « auto » suit le thème de HA, sinon choix fixé (mémorisé dans ce navigateur). */
+    get _themeMode() { const m = pref('theme', 'auto'); return m === 'clair' || m === 'sombre' ? m : 'auto'; }
+    get _dark() { const m = this._themeMode; return m === 'sombre' || (m === 'auto' && !!(this._hass && this._hass.themes && this._hass.themes.darkMode)); }
+    _applyTheme() {
+      const plan = this.shadowRoot.getElementById('plan');
+      if (plan) plan.classList.toggle('dark', this._dark);
+      (this._texts || []).forEach((o) => { try { this._styleText(o); } catch (_e) { /* texte supprimé */ } });
+    }
+    _cycleTheme() { setPref('theme', { auto: 'clair', clair: 'sombre', sombre: 'auto' }[this._themeMode]); this._renderActions(); this._applyTheme(); }
     get _admin() { return !!(this._hass && this._hass.user && this._hass.user.is_admin); }
 
     _build() {
       this._built = true;
       this.shadowRoot.innerHTML = `<style>${STYLE}</style>
-        <div class="top"><ha-menu-button></ha-menu-button><span class="title" id="title">${esc(this._title)}</span><span id="actions"></span></div>
-        <div class="tabs" id="tabs"></div>
-        <div class="ecrans" id="ecrans" hidden></div>
+        <div class="top"><ha-menu-button></ha-menu-button><span class="title" id="title">${esc(this._title)}</span><div class="tabs" id="tabs"></div><div class="ecrans" id="ecrans" hidden></div><span id="actions"></span></div>
         <div class="tools" id="tools" hidden></div>
         <main id="main"><div class="card muted">Chargement des plans…</div></main>`;
       this._menu = this.shadowRoot.querySelector('ha-menu-button'); this._menu.hass = this._hass; this._menu.narrow = this._narrow;
       this._titleEl = this.shadowRoot.getElementById('title');
       this._ro.observe(this.shadowRoot.getElementById('main'));
+      this._bindSwipe(this.shadowRoot.getElementById('main'));
       this._loadList();
     }
 
@@ -205,11 +227,21 @@
       box.hidden = !liste.length && !this._ecransErr;
       if (box.hidden) return;
       const ETATS = { en_attente: 'en attente', recuperation: 'récupération', reconnaissance: 'reconnaissance', compilation: 'compilation…', pret_a_poser: 'firmware prêt', envoi: 'envoi à l\'écran', verification: 'vérification', termine: 'terminé', echec: 'échec' };
-      box.innerHTML = `<details><summary>Écrans ESP (${liste.length})</summary>${this._ecransErr ? `<p class="muted">${esc(this._ecransErr)}</p>` : ''}${liste.map((a) => {
-        const st = this._etats[a.nom];
-        return `<div class="ecran"><b>${esc(a.nomAffichage || a.nom)}</b> <span class="muted">${st ? esc(ETATS[st.etat] || st.etat) + (st.detail ? ' — ' + esc(String(st.detail).slice(-80)) : '') : 'aucun état'}</span>
-          <button data-gen="${esc(a.nom)}"><ha-icon icon="mdi:cog-play" style="--mdc-icon-size:18px"></ha-icon>Générer</button></div>`;
-      }).join('')}</details>`;
+      if (!liste.some((a) => a.nom === this._ecranSel)) this._ecranSel = liste.length ? liste[0].nom : null;
+      const sel = liste.find((a) => a.nom === this._ecranSel);
+      const st = sel ? this._etats[sel.nom] : null;
+      const etatTxt = sel ? (st ? esc(ETATS[st.etat] || st.etat) + (st.detail ? ' — ' + esc(String(st.detail).slice(-80)) : '') : 'aucun état') : '';
+      box.innerHTML = `<button id="ecransbtn" title="Générer les pages de plans des écrans ESP (${liste.length} écran(s))"><ha-icon icon="mdi:monitor-dashboard" style="--mdc-icon-size:18px"></ha-icon>${liste.length}</button><div class="pop" id="ecranspop"${this._ecransOpen ? '' : ' hidden'}>${this._ecransErr ? `<p class="muted">${esc(this._ecransErr)}</p>` : ''}
+        ${sel ? `<select id="ecransel">${liste.map((a) => `<option value="${esc(a.nom)}"${a.nom === sel.nom ? ' selected' : ''}>${esc(a.nomAffichage || a.nom)}</option>`).join('')}</select>
+        <div class="muted ecranetat">${etatTxt}</div>
+        <button data-gen="${esc(sel.nom)}"><ha-icon icon="mdi:cog-play" style="--mdc-icon-size:18px"></ha-icon>Générer</button>` : ''}</div>`;
+      const cb = box.querySelector('#ecransel');
+      if (cb) cb.addEventListener('change', () => { this._ecranSel = cb.value; this._drawEcrans(); });
+      box.querySelector('#ecransbtn').addEventListener('click', (e) => { e.stopPropagation(); this._ecransOpen = !this._ecransOpen; box.querySelector('#ecranspop').hidden = !this._ecransOpen; });
+      if (!this._ecransClose) {
+        this._ecransClose = (e) => { if (!this._ecransOpen) return; const bx = this.shadowRoot.getElementById('ecrans'); if (bx && !e.composedPath().includes(bx)) { this._ecransOpen = false; const pp = bx.querySelector('#ecranspop'); if (pp) pp.hidden = true; } };
+        this.shadowRoot.addEventListener('click', this._ecransClose);
+      }
       box.querySelectorAll('button[data-gen]').forEach((b) => b.addEventListener('click', async () => {
         b.disabled = true;
         try { await this._hass.callWS({ type: 'dimotic_plans/generate', device: b.dataset.gen }); this._toast('Génération demandée : ' + b.dataset.gen); }
@@ -248,12 +280,16 @@
     _renderActions() {
       const box = this.shadowRoot.getElementById('actions');
       if (!box) return;
-      if (!this._admin) { box.innerHTML = ''; return; }
-      box.innerHTML = !this._edit
+      const m = this._themeMode;
+      const themeBtn = `<button class="theme" id="themebtn" title="Thème du plan : ${m} (cliquer pour changer)"><ha-icon icon="${m === 'sombre' ? 'mdi:weather-night' : m === 'clair' ? 'mdi:white-balance-sunny' : 'mdi:theme-light-dark'}" style="--mdc-icon-size:18px"></ha-icon></button> `;
+      const onTheme = () => { const b = box.querySelector('#themebtn'); if (b) b.addEventListener('click', () => this._cycleTheme()); };
+      if (!this._admin) { box.innerHTML = themeBtn; onTheme(); return; }
+      box.innerHTML = themeBtn + (!this._edit
         ? '<button id="editbtn"><ha-icon icon="mdi:pencil" style="--mdc-icon-size:18px"></ha-icon>Modifier</button>'
         : this._dirty
           ? '<button id="cancel">Annuler</button> <button class="main" id="save">Enregistrer</button>'
-          : '<button class="main" id="done">Terminer</button>';
+          : '<button class="main" id="done">Terminer</button>');
+      onTheme();
       const on = (id, fn) => { const b = box.querySelector('#' + id); if (b) b.addEventListener('click', fn); };
       on('editbtn', () => this._enterEdit());
       on('cancel', () => this._cancelEdit());
@@ -261,12 +297,37 @@
       on('done', () => this._leaveEdit());
     }
 
+    /* Téléphone : un balayage horizontal du doigt change de plan (le dernier ramène au premier et inversement). Inactif en édition. */
+    _bindSwipe(main) {
+      let x0 = null, y0 = 0, t0 = 0;
+      main.addEventListener('touchstart', (e) => {
+        if (e.touches.length !== 1 || this._edit) { x0 = null; return; }
+        x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now();
+      }, { passive: true });
+      main.addEventListener('touchend', (e) => {
+        if (x0 === null) return;
+        const t = e.changedTouches[0]; const dx = t.clientX - x0, dy = t.clientY - y0; x0 = null;
+        if (Math.abs(dx) < 60 || Math.abs(dx) < 1.5 * Math.abs(dy) || Date.now() - t0 > 800) return;
+        this._swipedAt = Date.now(); this._nextPlan(dx < 0 ? 1 : -1);
+      }, { passive: true });
+      // Un balayage qui finit sur une icône ne doit pas la commander.
+      main.addEventListener('click', (e) => { if (this._swipedAt && Date.now() - this._swipedAt < 400) { e.stopPropagation(); e.preventDefault(); } }, true);
+    }
+
+    _nextPlan(step) {
+      const n = this._plans.length;
+      if (n < 2 || (this._edit && this._dirty)) return;
+      const i = Math.max(0, this._plans.findIndex((p) => p.id === this._current));
+      this._show(this._plans[(i + step + n) % n].id);
+    }
+
     _renderTabs() {
       const tabs = this.shadowRoot.getElementById('tabs');
-      tabs.style.display = this._plans.length > 1 || this._edit ? '' : 'none';
+      tabs.style.visibility = this._plans.length > 1 || this._edit ? '' : 'hidden';
       const lock = this._edit && this._dirty;
-      tabs.innerHTML = this._plans.map((p) => `<button class="tab${p.id === this._current ? ' on' : ''}" data-id="${esc(p.id)}" ${lock ? 'disabled' : ''}>${esc(p.id)}</button>`).join('');
-      tabs.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => { if (!b.disabled && b.dataset.id !== this._current) this._show(b.dataset.id); }));
+      tabs.innerHTML = `<select class="plansel" id="plansel" title="Plan affiché" ${lock ? 'disabled' : ''}>${this._plans.map((p) => `<option value="${esc(p.id)}"${p.id === this._current ? ' selected' : ''}>${esc(p.id)}</option>`).join('')}</select>`;
+      const sel = tabs.querySelector('#plansel');
+      sel.addEventListener('change', () => { if (!sel.disabled && sel.value !== this._current) this._show(sel.value); });
     }
 
     _renderTools() {
@@ -358,6 +419,7 @@
           <div class="guide v" id="gv"></div><div class="guide h" id="gh"></div></div>
         <div class="foot muted">${data.positions.length} objet(s)${orphans ? ` · <span class="warn">${orphans} orphelin(s)</span>` : ''}${data.texts.length ? ` · ${data.texts.length} texte(s)` : ''}</div>`;
       const plan = main.querySelector('#plan');
+      plan.classList.toggle('dark', this._dark);
       const img = main.querySelector('#img');
       if (img) { if (img.complete) this._fit(); img.addEventListener('load', () => this._fit()); } else { plan.style.width = '600px'; plan.style.height = '400px'; }
       if (this._edit) plan.addEventListener('pointerdown', (e) => { if (e.target === plan || e.target === img) this._select(null); });
@@ -384,11 +446,22 @@
       this._refresh();
     }
 
+    /* Couleur d'un texte libre selon le thème : en clair le blanc devient sombre (lisible sur l'image) ; en sombre, une couleur
+       foncée devient claire ; les couleurs vives restent. */
+    _textColor(color) {
+      const c = String(color || '').trim();
+      const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(c);
+      if (!m) return this._dark ? '#e8e8e8' : (c || '#212121');
+      let h = m[1]; if (h.length === 3) h = h.split('').map((x) => x + x).join('');
+      const lum = (0.299 * parseInt(h.slice(0, 2), 16) + 0.587 * parseInt(h.slice(2, 4), 16) + 0.114 * parseInt(h.slice(4, 6), 16)) / 255;
+      if (this._dark) return lum < 0.45 ? '#e8e8e8' : '#' + h;
+      return lum > 0.93 ? '#212121' : '#' + h;
+    }
+
     _styleText(o) {
       const t = this._data().texts[o.index];
       o.el.textContent = t.text;
-      const light = /^#?(f{3}|f{6})$/i.test(String(t.color || '').trim());
-      o.el.style.cssText = `left:${t.x * 100}%;top:${t.y * 100}%;font-size:${TEXT_PX[t.size] || 20}px;color:${light ? '#212121' : (t.color || '#212121')}`;
+      o.el.style.cssText = `left:${t.x * 100}%;top:${t.y * 100}%;font-size:${TEXT_PX[t.size] || 20}px;color:${this._textColor(t.color)}`;
     }
 
     /* Plus grande taille de l'image qui tient dans la zone, proportions gardées. */

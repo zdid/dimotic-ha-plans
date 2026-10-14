@@ -26,7 +26,7 @@ from .const import (
 from .storage import PlanStore
 
 _LOGGER = logging.getLogger(__name__)
-VERSION = "0.1.9"
+VERSION = "0.1.10"
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

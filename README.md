@@ -52,5 +52,13 @@ Avec l'application `esps-assemble` de dimotic-ha (assembleur de sources ESPHome)
   et le « quoi » de la taxonomie, textes) et leurs images en base64 ; l'assembleur s'en sert pour fabriquer les pages de plans des écrans.
 - **Bouton « Générer »** : renseigner le **site** dans *Paramètres → Appareils et services → Plans → Configurer* (ex. `stfort`, `noisy`) ; le panneau
   affiche alors, pour les administrateurs, la liste « Écrans ESP » (appareils de l'assembleur qui ont des pages de plans, avec leur état) et un bouton
-  **Générer** par appareil. Il publie la demande `dimotic/esps-assemble/<site>/generer` par le MQTT de HA ; l'assembleur assemble, l'usine compile, le
+  **Générer** par appareil (dans la barre du haut : icône + nombre d'écrans, puis une liste déroulante pour choisir l'écran). Il publie la demande `dimotic/esps-assemble/<site>/generer` par le MQTT de HA ; l'assembleur assemble, l'usine compile, le
   poseur envoie à l'écran.
+
+## Affichage (depuis v0.1.10)
+
+- **Thème** : un bouton de la barre du haut fait défiler *auto → clair → sombre* (choix mémorisé dans le navigateur ; *auto* suit le thème de HA). En
+  sombre, l'image du plan est inversée (teintes conservées), les valeurs de capteurs passent en texte clair sur fond sombre, les couleurs foncées des textes
+  libres deviennent claires.
+- **Barre unique** : menu, plans (liste déroulante), écrans ESP, thème et « Modifier » sur une seule ligne (le titre se masque sur téléphone).
+- **Téléphone** : un balayage horizontal change de plan (boucle du dernier au premier et inversement) ; inactif en édition.
