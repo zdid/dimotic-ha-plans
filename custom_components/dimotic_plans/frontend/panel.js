@@ -161,7 +161,7 @@
       this._refresh();
     }
     set narrow(value) { this._narrow = value; if (this._menu) this._menu.narrow = value; }
-    set panel(p) { this._title = (p && p.config && p.config.title) || 'Plans'; this._site = (p && p.config && p.config.site) || ''; if (this._titleEl) this._titleEl.textContent = this._title; }
+    set panel(p) { this._title = (p && p.config && p.config.title) || 'Plans'; this._site = String((p && p.config && p.config.site) || '').trim().toLowerCase(); if (this._titleEl) this._titleEl.textContent = this._title; }
     set route(_r) {}
     connectedCallback() { const m = this.shadowRoot.getElementById('main'); if (m) this._ro.observe(m); window.addEventListener('keydown', this._onKey); }
     disconnectedCallback() {
