@@ -506,7 +506,9 @@
         } else if (st && domain === 'climate') {
           /* comme HAPLAN : consigne puis « act: » (température actuelle) sur une seconde ligne */
           const cons = st.attributes.temperature, act = st.attributes.current_temperature;
-          val = `${cons != null ? cons + '°C' : '—'}\nact: ${act != null ? act + '°C' : 'N/A'}`;
+          /* thermostat éteint (mode « off ») : « Éteint » à la place de la consigne, qui ne veut rien dire tant qu'il ne régule pas */
+          const consTxt = st.state === 'off' ? 'Éteint' : (cons != null ? cons + '°C' : '—');
+          val = `${consTxt}\nact: ${act != null ? act + '°C' : 'N/A'}`;
         } else if (st && domain === 'cover' && st.attributes.current_position != null) {
           val = `${st.attributes.current_position} %`;
         }
