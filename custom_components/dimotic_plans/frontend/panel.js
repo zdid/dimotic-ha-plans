@@ -42,7 +42,7 @@
     .plan.dark .obj .ico { filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000); }
     .plan.dark .obj.on .ico { filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 4px var(--obj-color, #ffb300)); }
     .plan.dark .obj .val { background: rgba(32,32,32,.88); color: #eee; }
-    .top button.theme { padding: 4px 8px; }
+    .top button.theme, .top button.refresh { padding: 4px 8px; }
     .tools .hint { font-size: 13px; color: var(--secondary-text-color, #727272); }
     main { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px 16px; display: flex; flex-direction: column; align-items: center; }
     .card { background: var(--card-background-color, #fff); border-radius: 12px; padding: 16px; box-shadow: var(--ha-card-box-shadow, 0 1px 3px rgba(0,0,0,.2)); }
@@ -191,6 +191,11 @@
       if (plan) plan.classList.toggle('dark', this._dark);
       (this._texts || []).forEach((o) => { try { this._styleText(o); } catch (_e) { /* texte supprimé */ } });
     }
+    /* Bouton Rafraîchir : redimensionne le plan et reconstruit les valeurs. En édition avec des changements non enregistrés, on ne recharge pas (ils seraient perdus) : on repositionne seulement. */
+    _rafraichir() {
+      if (this._edit && this._dirty) { this._fit(); this._renderPlan(); return; }
+      if (this._current) this._show(this._current); else this._fit();
+    }
     _cycleTheme() { setPref('theme', { auto: 'clair', clair: 'sombre', sombre: 'auto' }[this._themeMode]); this._renderActions(); this._applyTheme(); }
     get _admin() { return !!(this._hass && this._hass.user && this._hass.user.is_admin); }
 
@@ -282,9 +287,13 @@
       if (!box) return;
       const m = this._themeMode;
       const themeBtn = `<button class="theme" id="themebtn" title="Thème du plan : ${m} (cliquer pour changer)"><ha-icon icon="${m === 'sombre' ? 'mdi:weather-night' : m === 'clair' ? 'mdi:white-balance-sunny' : 'mdi:theme-light-dark'}" style="--mdc-icon-size:18px"></ha-icon></button> `;
-      const onTheme = () => { const b = box.querySelector('#themebtn'); if (b) b.addEventListener('click', () => this._cycleTheme()); };
-      if (!this._admin) { box.innerHTML = themeBtn; onTheme(); return; }
-      box.innerHTML = themeBtn + (!this._edit
+      const refreshBtn = '<button class="refresh" id="refreshbtn" title="Rafraîchir : recharge le plan et repositionne les valeurs"><ha-icon icon="mdi:refresh" style="--mdc-icon-size:18px"></ha-icon></button> ';
+      const onTheme = () => {
+        const b = box.querySelector('#themebtn'); if (b) b.addEventListener('click', () => this._cycleTheme());
+        const r = box.querySelector('#refreshbtn'); if (r) r.addEventListener('click', () => this._rafraichir());
+      };
+      if (!this._admin) { box.innerHTML = refreshBtn + themeBtn; onTheme(); return; }
+      box.innerHTML = refreshBtn + themeBtn + (!this._edit
         ? '<button id="editbtn"><ha-icon icon="mdi:pencil" style="--mdc-icon-size:18px"></ha-icon>Modifier</button>'
         : this._dirty
           ? '<button id="cancel">Annuler</button> <button class="main" id="save">Enregistrer</button>'
