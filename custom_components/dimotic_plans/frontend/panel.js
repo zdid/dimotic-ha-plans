@@ -48,7 +48,7 @@
     .card { background: var(--card-background-color, #fff); border-radius: 12px; padding: 16px; box-shadow: var(--ha-card-box-shadow, 0 1px 3px rgba(0,0,0,.2)); }
     .muted { color: var(--secondary-text-color, #727272); }
     .warn { color: var(--warning-color, #ff9800); }
-    .plan { position: relative; background: #fff; border-radius: 12px; box-shadow: var(--ha-card-box-shadow, 0 1px 3px rgba(0,0,0,.2)); line-height: 0; touch-action: manipulation; }
+    .plan { position: relative; background: #fff; border-radius: 12px; box-shadow: var(--ha-card-box-shadow, 0 1px 3px rgba(0,0,0,.2)); line-height: 0; touch-action: manipulation; margin-top: auto; }
     .plan.edit { outline: 2px dashed var(--primary-color, #03a9f4); outline-offset: 4px; }
     .plan img { display: block; width: 100%; height: 100%; border-radius: 12px; pointer-events: none; user-select: none; }
     .obj { position: absolute; transform: translateY(-100%); display: flex; flex-direction: row; align-items: center; gap: 2px; cursor: pointer;
@@ -71,7 +71,7 @@
     .gridlines { position: absolute; inset: 0; pointer-events: none; border-radius: 12px; }
     .tools select { font: inherit; font-size: 14px; padding: 4px; border-radius: 8px; border: 1px solid var(--divider-color, #ccc); background: var(--card-background-color, #fff); color: inherit; }
     .tools label { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; }
-    .foot { margin-top: 8px; font-size: 13px; }
+    .foot { margin-top: 8px; margin-bottom: auto; font-size: 13px; }
     .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 10; padding: 16px; }
     .dialog { background: var(--card-background-color, #fff); color: var(--primary-text-color, #212121); border-radius: 12px; padding: 20px; width: min(460px, 100%);
               max-height: 90vh; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.35); box-sizing: border-box; }
