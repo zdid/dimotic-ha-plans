@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 
@@ -26,7 +27,16 @@ from .const import (
 from .storage import PlanStore
 
 _LOGGER = logging.getLogger(__name__)
-VERSION = "0.1.10"
+
+def _lire_version() -> str:
+    """Version lue dans manifest.json : elle sert d'empreinte à l'URL du panneau (?v=…), donc à vider le cache du navigateur à chaque mise à jour."""
+    try:
+        return str(json.loads((Path(__file__).parent / "manifest.json").read_text(encoding="utf-8")).get("version", "0"))
+    except (OSError, ValueError):
+        return "0"
+
+
+VERSION = _lire_version()
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
