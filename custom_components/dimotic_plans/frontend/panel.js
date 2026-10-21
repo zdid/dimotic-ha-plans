@@ -124,9 +124,13 @@
     [/water_heater|chauffe_eau|ballon/, 'mdi:water-boiler', '#FF9800', '#2196F3'],
     [/radiateur|radiator|heating|chauffage/, 'mdi:radiator', '#F44336', '#2196F3'],
   ];
+  /* Taxonomie fournie par l'intégration dimotic_taxonomie (facultative) : entity_id -> {quoi, lieu, …}. Vide si absente :
+     le panneau retombe alors sur l'attribut `attributs_taxonomie` posé par nommage. */
+  const TAX = new Map();
+  const taxOf = (st) => TAX.get(st.entity_id) || st.attributes.attributs_taxonomie || null;
   const switchKind = (st, domain) => {
     if (domain !== 'switch' || !st) return null;
-    const quoi = ((st.attributes.attributs_taxonomie || {}).quoi || '').toLowerCase();
+    const quoi = ((taxOf(st) || {}).quoi || '').toLowerCase();
     for (const text of [st.entity_id.toLowerCase(), quoi]) {
       const k = SWITCH_KINDS.find((x) => x[0].test(text));
       if (k) return { icon: k[1], on: k[2], off: k[3] };
@@ -169,7 +173,7 @@
       const first = !this._hass; const wasDark = this._built ? this._dark : null; this._hass = hass;
       if (!this._built) this._build();
       if (this._menu) this._menu.hass = hass;
-      if (first) this._renderActions();
+      if (first) { this._renderActions(); this._loadTax().then(() => this._refresh()); }
       this._startEcrans();
       if (wasDark !== null && wasDark !== this._dark) this._applyTheme();
       this._refresh();
@@ -726,19 +730,30 @@
      * et entités secondaires (diagnostic, configuration, masquées : boutons RFXCOM…) repérées par les registres de HA. */
     _describe(s) {
       const ent = (this._hass.entities || {})[s.entity_id] || {};
-      const tax = s.attributes.attributs_taxonomie || null;
+      const tax = taxOf(s);
       const t = (k) => (tax && typeof tax[k] === 'string' ? tax[k] : '');
       return {
         id: s.entity_id,
         name: s.attributes.friendly_name || s.entity_id,
         tax: !!tax,
         quoi: t('quoi'), quoiAppareil: t('quoi_appareil'),
-        lieu: t('lieu_principal'), precis: t('lieu_precis'), pere: t('lieu_pere'),
+        lieu: t('lieu_principal') || t('lieu'), precis: t('lieu_precis') || t('precis'), pere: t('lieu_pere') || t('pere'),
         secondary: !!ent.hidden || ent.entity_category === 'diagnostic' || ent.entity_category === 'config',
       };
     }
 
-    _addObject() {
+    /* Charge la table de taxonomie de dimotic_taxonomie (une fois, puis à chaque ouverture du choix d'objet) ; sans l'intégration,
+     * l'appel échoue et la table reste vide (repli sur nommage). */
+    async _loadTax() {
+      try {
+        const res = await this._hass.callWS({ type: 'dimotic_taxonomie/entites', inclure_techniques: true });
+        TAX.clear();
+        for (const e of res.entites || []) if (e.taxonomie) TAX.set(e.entity_id, e.taxonomie);
+      } catch (_e) { /* intégration absente : repli sur l'attribut */ }
+    }
+
+    async _addObject() {
+      await this._loadTax();
       const used = new Set(this._draft.positions.map((p) => p.entity_id));
       const all = Object.values(this._hass.states).filter((s) => !used.has(s.entity_id)).map((s) => this._describe(s));
       const count = (key) => {
@@ -774,8 +789,9 @@
           const icon = document.createElement('ha-state-icon');
           icon.hass = this._hass; icon.stateObj = this._hass.states[e.id];
           const label = document.createElement('span');
-          const title = e.tax ? [e.quoi, e.precis].filter(Boolean).join(' · ') : e.name;
-          const where = e.tax ? [e.lieu, e.pere].filter(Boolean).join(', ') : '';
+          const dedup = (a) => a.filter((v, i) => v && a.findIndex((w) => w && w.toLowerCase() === v.toLowerCase()) === i);
+          const title = e.tax ? dedup([e.quoi, e.precis, e.lieu]).join(' ') : e.name;
+          const where = e.tax ? e.pere : '';
           const appareil = e.quoiAppareil && e.quoiAppareil !== e.quoi ? ` (${e.quoiAppareil})` : '';
           label.innerHTML = `${esc(title)}${esc(appareil)}<small>${esc(where ? where + ' — ' : '')}${esc(e.tax ? e.name + ' — ' : '')}${esc(e.id)}</small>`;
           row.append(icon, label);

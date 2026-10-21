@@ -13,7 +13,7 @@ les commander, et à terme les créer et les modifier — **sans passer par dimo
 > du registre).
 >
 > **Éditeur (administrateurs, bouton « Modifier »)** : glisser les objets et les textes (souris ou doigt), flèches du
-> clavier (1 px, Maj : 10 px), **magnétisme** sur les autres éléments (ligne rose) puis sur une **grille** (aucune, 0,5 %, 1 % ou 2 % de l'image ; invisible sauf « Afficher » ; les flèches avancent alors d'un pas), ajouter un objet (choix par la **taxonomie** QUOI/OÙ posée par nommage — attribut `attributs_taxonomie` — avec recherche ; entités sans taxonomie et secondaires cachées par défaut) ou un texte, retirer,
+> clavier (1 px, Maj : 10 px), **magnétisme** sur les autres éléments (ligne rose) puis sur une **grille** (aucune, 0,5 %, 1 % ou 2 % de l'image ; invisible sauf « Afficher » ; les flèches avancent alors d'un pas), ajouter un objet (choix par la **taxonomie** QUOI/OÙ posée par nommage (attribut `attributs_taxonomie`) ou, depuis la v0.2.0, fournie par l'intégration [dimotic-ha-taxonomie](https://github.com/zdid/dimotic-ha-taxonomie) (facultative : couvre aussi les appareils non MQTT) — avec recherche ; entités sans taxonomie et secondaires cachées par défaut) ou un texte, retirer,
 > créer un plan (image ou page blanche), le renommer, changer son image, le supprimer. Rien n'est écrit avant « Enregistrer ».
 >
 > **Point d'ancrage** : la position d'un objet est le **coin inférieur gauche de son icône**, celle d'un texte le coin

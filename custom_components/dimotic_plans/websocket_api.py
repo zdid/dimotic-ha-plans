@@ -156,7 +156,18 @@ async def ws_export(hass: HomeAssistant, connection: websocket_api.ActiveConnect
     registry = er.async_get(hass)
     images_dir = Path(hass.config.path(IMAGES_DIR))
 
+    # Cœur-HA (intégration dimotic_taxonomie, facultative) : table calculée ici, dans la boucle d'événements, car
+    # `quoi_of` tourne ensuite dans un fil d'exécution et l'index se reconstruit à la demande.
+    index = (hass.data.get("dimotic_taxonomie") or {}).get("index")
+    quoi_coeur: dict[str, str] = {}
+    if index is not None:
+        for e in index.registre().toutes_les_entites():
+            if e.taxonomie and e.taxonomie.get("quoi"):
+                quoi_coeur[e.entity_id] = e.taxonomie["quoi"]
+
     def quoi_of(entity_id: str) -> str | None:
+        if entity_id in quoi_coeur:
+            return quoi_coeur[entity_id]
         state = hass.states.get(entity_id)
         tax = state.attributes.get("attributs_taxonomie") if state is not None else None
         return tax.get("quoi") if isinstance(tax, dict) else None
