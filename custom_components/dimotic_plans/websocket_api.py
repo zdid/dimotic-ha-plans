@@ -186,13 +186,19 @@ async def ws_export(hass: HomeAssistant, connection: websocket_api.ActiveConnect
     connection.send_result(msg["id"], result)
 
 
-@websocket_api.websocket_command({vol.Required("type"): "dimotic_plans/generate", vol.Required("device"): str, vol.Optional("action", default="firmware"): vol.In(["firmware", "amorce"])})
+@websocket_api.websocket_command({
+    vol.Required("type"): "dimotic_plans/generate",
+    vol.Required("device"): str,
+    vol.Optional("action", default="firmware"): vol.In(["firmware", "amorce"]),
+    vol.Optional("plans"): [str],
+})
 @websocket_api.require_admin
 @websocket_api.async_response
 async def ws_generate(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Bouton « Générer » : demande à l'assembleur d'écrans ESP (application esps-assemble de dimotic-ha) d'assembler l'appareil et de le faire fabriquer.
 
-    Publie `{device, action}` (non conservé) sur `dimotic/esps-assemble/<site>/generer` par le MQTT de HA ; le site est réglé dans les options.
+    Publie `{appareil, action[, plans]}` (non conservé) sur `dimotic/esps-assemble/<site>/generer` par le MQTT de HA ; le site est réglé dans les options.
+    `plans` (facultatif) : les plans cochés dans le panneau, dans l'ordre d'affichage ; absent = les plans de la fiche de l'appareil.
     """
     site = ""
     for entry in hass.config_entries.async_entries(DOMAIN):
@@ -204,13 +210,20 @@ async def ws_generate(hass: HomeAssistant, connection: websocket_api.ActiveConne
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", device):
         connection.send_error(msg["id"], "invalid", "Nom d'appareil invalide.")
         return
+    payload: dict[str, Any] = {"appareil": device, "action": msg["action"]}
+    if "plans" in msg:
+        plans = [p.strip() for p in msg["plans"] if isinstance(p, str) and p.strip()]
+        if not plans or len(plans) > 50 or any(len(p) > 64 for p in plans):
+            connection.send_error(msg["id"], "no_plan", "Cochez au moins un plan à envoyer sur l'écran.")
+            return
+        payload["plans"] = list(dict.fromkeys(plans))
     try:
         from homeassistant.components import mqtt
-        await mqtt.async_publish(hass, f"dimotic/esps-assemble/{site}/generer", json.dumps({"appareil": device, "action": msg["action"]}), 1, False)
+        await mqtt.async_publish(hass, f"dimotic/esps-assemble/{site}/generer", json.dumps(payload), 1, False)
     except Exception as err:  # MQTT absent ou déconnecté : message lisible côté panneau
         connection.send_error(msg["id"], "mqtt_unavailable", f"Publication MQTT impossible : {err}")
         return
-    connection.send_result(msg["id"], {"site": site, "device": device, "action": msg["action"]})
+    connection.send_result(msg["id"], {"site": site, "device": device, "action": msg["action"], **({"plans": payload["plans"]} if "plans" in payload else {})})
 
 
 # --- Éditeur (administrateurs) ---------------------------------------------------------------------------------------

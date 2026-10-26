@@ -34,6 +34,9 @@
     .ecrans .pop[hidden] { display: none; }
     .ecrans .pop select { width: 100%; font: inherit; padding: 6px; border-radius: 8px; border: 1px solid var(--divider-color, #ccc); background: var(--primary-background-color, #fff); color: inherit; }
     .ecranetat { font-size: 13px; margin: 8px 0; word-break: break-word; }
+    .plansel { margin: 8px 0; max-height: 40vh; overflow: auto; border-top: 1px solid var(--divider-color, #ccc); padding-top: 6px; }
+    .plansel label { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; font-size: 14px; }
+    .plansel .titre { font-size: 13px; color: var(--secondary-text-color, #727272); margin-bottom: 2px; }
     .ecrans .pop button { border: 1px solid var(--divider-color, #ccc); background: transparent; color: var(--primary-color, #03a9f4); border-radius: 8px; padding: 4px 10px; font: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
     @media (max-width: 600px) { .title { display: none; } }
     /* Thème sombre : l'image est inversée (teintes conservées), les icônes et valeurs suivent. */
@@ -229,6 +232,18 @@
       await sub(`dimotic/esphome/${this._site}/status/+`, (m) => { const nom = String(m.topic).split('/').pop(); try { this._etats[nom] = m.payload ? JSON.parse(m.payload) : null; } catch (_e) { /* message illisible */ } this._drawEcrans(); });
     }
 
+    /* Plans cochés pour un écran : mémorisés par appareil dans le navigateur ; première fois = les plans de sa fiche (sinon tous). */
+    _plansChoisis(appareil) {
+      this._planSel = this._planSel || {};
+      if (!this._planSel[appareil.nom]) {
+        const ids = (this._plans || []).map((p) => p.id);
+        const saved = pref('ecran_plans.' + appareil.nom, null);
+        const base = Array.isArray(saved) ? saved : (Array.isArray(appareil.plans) && appareil.plans.length ? appareil.plans : ids);
+        this._planSel[appareil.nom] = new Set(base.filter((id) => typeof id === 'string'));
+      }
+      return this._planSel[appareil.nom];
+    }
+
     _drawEcrans() {
       const box = this.shadowRoot.getElementById('ecrans');
       if (!box) return;
@@ -239,11 +254,18 @@
       if (!liste.some((a) => a.nom === this._ecranSel)) this._ecranSel = liste.length ? liste[0].nom : null;
       const sel = liste.find((a) => a.nom === this._ecranSel);
       const st = sel ? this._etats[sel.nom] : null;
+      const choisis = sel ? this._plansChoisis(sel) : new Set();
       const etatTxt = sel ? (st ? esc(ETATS[st.etat] || st.etat) + (st.detail ? ' — ' + esc(String(st.detail).slice(-80)) : '') : 'aucun état') : '';
       box.innerHTML = `<button id="ecransbtn" title="Générer les pages de plans des écrans ESP (${liste.length} écran(s))"><ha-icon icon="mdi:monitor-dashboard" style="--mdc-icon-size:18px"></ha-icon>${liste.length}</button><div class="pop" id="ecranspop"${this._ecransOpen ? '' : ' hidden'}>${this._ecransErr ? `<p class="muted">${esc(this._ecransErr)}</p>` : ''}
         ${sel ? `<select id="ecransel">${liste.map((a) => `<option value="${esc(a.nom)}"${a.nom === sel.nom ? ' selected' : ''}>${esc(a.nomAffichage || a.nom)}</option>`).join('')}</select>
         <div class="muted ecranetat">${etatTxt}</div>
-        <button data-gen="${esc(sel.nom)}"><ha-icon icon="mdi:cog-play" style="--mdc-icon-size:18px"></ha-icon>Générer</button>` : ''}</div>`;
+        <div class="plansel"><div class="titre">Plans à envoyer sur l'écran (dans l'ordre du panneau)</div>${(this._plans || []).map((p) => `<label><input type="checkbox" data-plan="${esc(p.id)}"${choisis.has(p.id) ? ' checked' : ''}>${esc(p.id)}</label>`).join('')}</div>
+        <button data-gen="${esc(sel.nom)}"${choisis.size ? '' : ' disabled'}><ha-icon icon="mdi:cog-play" style="--mdc-icon-size:18px"></ha-icon>Générer</button>` : ''}</div>`;
+      box.querySelectorAll('input[data-plan]').forEach((c) => c.addEventListener('change', () => {
+        const set = this._plansChoisis(sel); if (c.checked) set.add(c.dataset.plan); else set.delete(c.dataset.plan);
+        setPref('ecran_plans.' + sel.nom, [...set]);
+        const g = box.querySelector('button[data-gen]'); if (g) g.disabled = !set.size;
+      }));
       const cb = box.querySelector('#ecransel');
       if (cb) cb.addEventListener('change', () => { this._ecranSel = cb.value; this._drawEcrans(); });
       box.querySelector('#ecransbtn').addEventListener('click', (e) => { e.stopPropagation(); this._ecransOpen = !this._ecransOpen; box.querySelector('#ecranspop').hidden = !this._ecransOpen; });
@@ -253,7 +275,13 @@
       }
       box.querySelectorAll('button[data-gen]').forEach((b) => b.addEventListener('click', async () => {
         b.disabled = true;
-        try { await this._hass.callWS({ type: 'dimotic_plans/generate', device: b.dataset.gen }); this._toast('Génération demandée : ' + b.dataset.gen); }
+        try {
+          const sel = (this._appareils || []).find((a) => a.nom === b.dataset.gen);
+          const set = sel ? this._plansChoisis(sel) : new Set();
+          const plans = (this._plans || []).map((p) => p.id).filter((id) => set.has(id)); // ordre du panneau
+          await this._hass.callWS({ type: 'dimotic_plans/generate', device: b.dataset.gen, plans });
+          this._toast(`Génération demandée : ${b.dataset.gen} (${plans.length} plan${plans.length > 1 ? 's' : ''})`);
+        }
         catch (err) { this._toast((err && err.message) || 'Échec de la demande'); }
         b.disabled = false;
       }));
